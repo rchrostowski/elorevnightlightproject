@@ -2,162 +2,156 @@
 
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+from pathlib import Path
 
-from src.load_data import load_lights_monthly_by_coord
+from src.load_data import load_lights_monthly_by_coord, load_model_data
 
-st.title("🌎 Nightlights by State")
-
-# ---------------------------------------------------------
-# 1. Load preprocessed lights panel
-# ---------------------------------------------------------
-df = load_lights_monthly_by_coord(fallback_if_missing=True)
-
-if df.empty:
-    st.error(
-        "lights_monthly_by_coord.csv is missing or empty.\n\n"
-        "Run `python scripts/build_all.py` to rebuild it, commit the CSV in "
-        "`data/intermediate/`, and redeploy."
-    )
-    st.stop()
-
-required_cols = {"iso", "name_1", "date", "avg_rad_month"}
-missing = required_cols - set(df.columns)
-if missing:
-    st.error(
-        f"Missing columns in lights_monthly_by_coord.csv: {missing}\n\n"
-        f"Found columns: {df.columns.tolist()}"
-    )
-    st.stop()
-
-# Keep only USA and clean dates
-df = df[df["iso"] == "USA"].copy()
-df["date"] = pd.to_datetime(df["date"], errors="coerce")
-df = df.dropna(subset=["date"])
-
-if df.empty:
-    st.error("No valid USA + date rows in lights panel after cleaning.")
-    st.stop()
-
-# ---------------------------------------------------------
-# 2. Map state names -> postal abbreviations for choropleth
-# ---------------------------------------------------------
-STATE_ABBR = {
-    "Alabama": "AL",
-    "Alaska": "AK",
-    "Arizona": "AZ",
-    "Arkansas": "AR",
-    "California": "CA",
-    "Colorado": "CO",
-    "Connecticut": "CT",
-    "Delaware": "DE",
-    "District of Columbia": "DC",
-    "Florida": "FL",
-    "Georgia": "GA",
-    "Hawaii": "HI",
-    "Idaho": "ID",
-    "Illinois": "IL",
-    "Indiana": "IN",
-    "Iowa": "IA",
-    "Kansas": "KS",
-    "Kentucky": "KY",
-    "Louisiana": "LA",
-    "Maine": "ME",
-    "Maryland": "MD",
-    "Massachusetts": "MA",
-    "Michigan": "MI",
-    "Minnesota": "MN",
-    "Mississippi": "MS",
-    "Missouri": "MO",
-    "Montana": "MT",
-    "Nebraska": "NE",
-    "Nevada": "NV",
-    "New Hampshire": "NH",
-    "New Jersey": "NJ",
-    "New Mexico": "NM",
-    "New York": "NY",
-    "North Carolina": "NC",
-    "North Dakota": "ND",
-    "Ohio": "OH",
-    "Oklahoma": "OK",
-    "Oregon": "OR",
-    "Pennsylvania": "PA",
-    "Rhode Island": "RI",
-    "South Carolina": "SC",
-    "South Dakota": "SD",
-    "Tennessee": "TN",
-    "Texas": "TX",
-    "Utah": "UT",
-    "Vermont": "VT",
-    "Virginia": "VA",
-    "Washington": "WA",
-    "West Virginia": "WV",
-    "Wisconsin": "WI",
-    "Wyoming": "WY",
-    "Puerto Rico": "PR",
-}
-
-# name_1 is the first admin level name (e.g. state)
-df["state_name"] = df["name_1"].astype(str)
-df["state"] = df["state_name"].map(STATE_ABBR)
-
-df = df.dropna(subset=["state"])
-
-if df.empty:
-    st.error(
-        "Could not map any state names in `name_1` to US postal codes. "
-        "Check that `name_1` contains US state names like 'California', "
-        "'Texas', etc."
-    )
-    st.stop()
-
-# ---------------------------------------------------------
-# 3. Choose month to visualize
-# ---------------------------------------------------------
-st.sidebar.header("Globe / Map Filters")
-
-unique_dates = sorted(df["date"].unique())
-default_date = unique_dates[-1]  # latest month
-
-selected_date = st.sidebar.selectbox(
-    "Select month:",
-    options=unique_dates,
-    index=len(unique_dates) - 1,
-    format_func=lambda d: d.strftime("%Y-%m"),
+# ---------- Page config & styling ----------
+st.set_page_config(
+    page_title="Night Lights Anomalia Dashboard",
+    layout="wide",
 )
 
-df_month = df[df["date"] == selected_date].copy()
+st.markdown(
+    """
+    <style>
+    .main {
+        background-color: #050710;
+    }
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+    }
+    .anomaly-card {
+        background: #0b0e1a;
+        border-radius: 18px;
+        padding: 1rem 1.25rem;
+        border: 1px solid #15192a;
+    }
+    .metric-label {
+        font-size: 0.9rem;
+        color: #c8c8d8;
+    }
+    .metric-value {
+        font-size: 1.4rem;
+        font-weight: 600;
+        color: #ffffff;
+    }
+    .panel-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: #ffffff;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
-if df_month.empty:
-    st.warning(
-        f"No data for selected month {selected_date.strftime('%Y-%m')}. "
-        "Try another month."
+st.markdown(
+    "<h1 style='margin-bottom: 1rem;'>Night Lights Anomalia Dashboard</h1>",
+    unsafe_allow_html=True,
+)
+
+# ---------- 1. Load data for metrics ----------
+
+lights = load_lights_monthly_by_coord(fallback_if_missing=True)
+model = load_model_data(fallback_if_missing=True)
+
+if not lights.empty and "date" in lights.columns:
+    lights["date"] = pd.to_datetime(lights["date"], errors="coerce")
+    lights = lights.dropna(subset=["date"])
+
+if not model.empty and "date" in model.columns:
+    model["date"] = pd.to_datetime(model["date"], errors="coerce")
+    model = model.dropna(subset=["date"])
+
+# ---------- 2. Sidebar month selector (drives metrics) ----------
+
+if not lights.empty:
+    unique_dates = sorted(lights["date"].unique())
+elif not model.empty:
+    unique_dates = sorted(model["date"].unique())
+else:
+    unique_dates = []
+
+if unique_dates:
+    default_idx = len(unique_dates) - 1
+    selected_date = st.sidebar.selectbox(
+        "Select month:",
+        options=unique_dates,
+        index=default_idx,
+        format_func=lambda d: pd.Timestamp(d).strftime("%Y-%m"),
     )
-    st.stop()
+else:
+    selected_date = None
 
-# Aggregate to one value per state for that month
-state_df = (
-    df_month.groupby(["state", "state_name"], as_index=False)["avg_rad_month"]
-    .mean()
-)
+# ---------- 3. Layout: big globe + right metrics panel ----------
 
-st.caption(
-    f"Average nighttime lights by state for {selected_date.strftime('%Y-%m')} "
-    f"({len(state_df)} states)."
-)
+left, right = st.columns([3.2, 1])
 
-# ---------------------------------------------------------
-# 4. Plot choropleth over USA
-# ---------------------------------------------------------
-fig = px.choropleth(
-    state_df,
-    locations="state",
-    locationmode="USA-states",
-    color="avg_rad_month",
-    hover_name="state_name",
-    scope="usa",
-)
+with left:
+    img_path = Path("assets/night_globe.png")
+    if img_path.exists():
+        st.image(str(img_path), use_column_width=True)
+    else:
+        st.info(
+            "Add a night-lights globe image at `assets/night_globe.png` "
+            "to match the design."
+        )
 
-st.plotly_chart(fig, use_container_width=True)
+with right:
+    # Brightness panel (static description, like the small map card)
+    st.markdown("<div class='anomaly-card'>", unsafe_allow_html=True)
+    st.markdown("<div class='panel-title'>Brightness Intensity</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<p style='font-size:0.85rem; color:#b0b0c5;'>"
+        "Nighttime radiance patterns aggregated from VIIRS data over your sample period. "
+        "Use the month selector on the left to drive the metrics below."
+        "</p>",
+        unsafe_allow_html=True,
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Metrics card
+    st.markdown("<div class='anomaly-card'>", unsafe_allow_html=True)
+    st.markdown("<div class='panel-title'>Metrics</div>", unsafe_allow_html=True)
+
+    delta_light_display = "—"
+    pred_ret_display = "—"
+
+    if selected_date is not None and not model.empty:
+        if {"brightness_change", "ret_fwd_1m", "date"}.issubset(model.columns):
+            m_month = model[model["date"] == pd.to_datetime(selected_date)].copy()
+            if not m_month.empty:
+                delta_light = m_month["brightness_change"].mean()
+                pred_ret = m_month["ret_fwd_1m"].mean()
+                delta_light_display = f"{delta_light:.2f}"
+                pred_ret_display = f"{pred_ret:.2f}"
+
+    st.markdown(
+        f"<div class='metric-label'>ΔLight</div>"
+        f"<div class='metric-value'>{delta_light_display}</div>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    st.markdown(
+        f"<div class='metric-label'>Predicted Return</div>"
+        f"<div class='metric-value'>{pred_ret_display}</div>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+if selected_date is not None:
+    st.caption(
+        f"Metrics computed from your merged nightlights–returns panel for "
+        f"{pd.Timestamp(selected_date).strftime('%Y-%m')}."
+    )
+
 
 
