@@ -299,58 +299,14 @@ fig.update_layout(
 
 # ---------- 7. Layout: globe only ----------
 
-left, right = st.columns([3.2, 1])
+st.plotly_chart(fig, use_container_width=True, height=650)
 
-with left:
-    st.plotly_chart(fig, use_container_width=True, height=650)
+st.caption(
+    f"Globe shows state-level hotspots for "
+    f"{pd.Timestamp(selected_date).strftime('%Y-%m')}. "
+    "Drag to rotate and explore different regions."
+)
 
-with right:
-    # Brightness description card
-    st.markdown("<div class='anomaly-card'>", unsafe_allow_html=True)
-    st.markdown("<div class='panel-title'>Brightness Intensity</div>", unsafe_allow_html=True)
-    desc = (
-        "Each hotspot represents a US state. Marker SIZE and BLUE intensity are "
-        "scaled by average VIIRS nighttime radiance for the selected month."
-    )
-    st.markdown(
-        f"<p style='font-size:0.85rem; color:#b0b0c5;'>{desc}</p>",
-        unsafe_allow_html=True,
-    )
-    st.markdown("</div>", unsafe_allow_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # Simple stats card for the selected month
-    st.markdown("<div class='anomaly-card'>", unsafe_allow_html=True)
-    st.markdown("<div class='panel-title'>Month Summary</div>", unsafe_allow_html=True)
-
-    avg_brightness = state_df["avg_rad_month"].mean()
-    max_row = state_df.loc[state_df["avg_rad_month"].idxmax()]
-    min_row = state_df.loc[state_df["avg_rad_month"].idxmin()]
-
-    st.markdown(
-        f"<div class='metric-label'>Average brightness</div>"
-        f"<div class='metric-value'>{avg_brightness:.2f}</div>",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    st.markdown(
-        f"<div class='metric-label'>Brightest state</div>"
-        f"<div class='metric-value'>{max_row['state_name']} ({max_row['avg_rad_month']:.2f})</div>",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    st.markdown(
-        f"<div class='metric-label'>Dimmest state</div>"
-        f"<div class='metric-value'>{min_row['state_name']} ({min_row['avg_rad_month']:.2f})</div>",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
 
 
