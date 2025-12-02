@@ -26,7 +26,7 @@ def build_lights_monthly_by_coord() -> pd.DataFrame:
     We:
         1) Filter to USA
         2) Create a proper datetime 'date' column
-        3) Trim to dates >= 2020-01-01 (to keep things small/modern)
+        3) Trim to dates >= 2018-01-01 (your chosen analysis window)
         4) Compute avg_rad_month = nlsum / area
         5) Aggregate by (iso, id_1, name_1, id_2, name_2, date)
         6) Save to data/intermediate/lights_monthly_by_coord.csv
@@ -61,8 +61,8 @@ def build_lights_monthly_by_coord() -> pd.DataFrame:
         errors="coerce",
     )
 
-    # 3) Trim to modern period (2020+ to keep file small and relevant)
-    cutoff = pd.Timestamp("2020-01-01")
+    # 3) Trim to your real analysis window: 2018+
+    cutoff = pd.Timestamp("2018-01-01")
     print(f"✂️ Trimming to dates >= {cutoff.date()}...")
     lights = lights[lights["date"] >= cutoff].copy()
 
@@ -83,6 +83,7 @@ def build_lights_monthly_by_coord() -> pd.DataFrame:
     out_path = DATA_INTER / "lights_monthly_by_coord.csv"
     print(f"💾 Writing region-based lights panel to {out_path}...")
     lights_panel.to_csv(out_path, index=False)
-    print("✅ Finished building lights_monthly_by_coord.csv (region-based).")
+    print("✅ Finished building lights_monthly_by_coord.csv (region-based, 2018+).")
 
     return lights_panel
+
