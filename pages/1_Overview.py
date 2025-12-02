@@ -56,7 +56,7 @@ df_filt = df[mask].copy()
 
 st.caption(
     f"Filtered to **{len(df_filt):,}** rows "
-    f"({len(df_filt['ticker'].nunique()) if 'ticker' in df_filt.columns else 0} tickers) "
+    f"({df_filt['ticker'].nunique() if 'ticker' in df_filt.columns else 0} tickers) "
     f"from {df_filt['date'].min().date()} to {df_filt['date'].max().date()}."
 )
 
@@ -162,8 +162,11 @@ st.divider()
 st.subheader("Single Ticker View")
 
 if "ticker" in df_filt.columns:
-    default_ticker = selected_tickers[0] if selected_tickers else df_filt["ticker"].iloc[0]
-    tkr = st.selectbox("Choose a ticker:", options=sorted(df_filt["ticker"].unique()), index=sorted(df_filt["ticker"].unique()).index(default_ticker))
+    unique_tickers = sorted(df_filt["ticker"].unique())
+    default_ticker = selected_tickers[0] if selected_tickers else unique_tickers[0]
+    default_index = unique_tickers.index(default_ticker)
+
+    tkr = st.selectbox("Choose a ticker:", options=unique_tickers, index=default_index)
 
     df_tkr = df_filt[df_filt["ticker"] == tkr].sort_values("date").copy()
 
@@ -188,3 +191,4 @@ if "ticker" in df_filt.columns:
     st.caption("Use this to tell the story for specific companies in your writeup.")
 else:
     st.info("No `ticker` column found in the dataset.")
+
