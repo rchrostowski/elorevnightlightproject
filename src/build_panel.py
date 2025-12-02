@@ -1,160 +1,156 @@
 # src/build_panel.py
 
+import numpy as np
 import pandas as pd
 
-from .load_data import load_raw_sp500
-from .preprocess_lights import build_lights_monthly_by_coord
+from .load_data import (
+    load_sp500_clean,
+    load_lights_monthly_by_coord,
+)
 
-# Mapping from 2-letter state codes to full uppercase names
-STATE_ABBREV_TO_NAME = {
-    "AL": "ALABAMA",
-    "AK": "ALASKA",
-    "AZ": "ARIZONA",
-    "AR": "ARKANSAS",
-    "CA": "CALIFORNIA",
-    "CO": "COLORADO",
-    "CT": "CONNECTICUT",
-    "DE": "DELAWARE",
-    "FL": "FLORIDA",
-    "GA": "GEORGIA",
-    "HI": "HAWAII",
-    "ID": "IDAHO",
-    "IL": "ILLINOIS",
-    "IN": "INDIANA",
-    "IA": "IOWA",
-    "KS": "KANSAS",
-    "KY": "KENTUCKY",
-    "LA": "LOUISIANA",
-    "ME": "MAINE",
-    "MD": "MARYLAND",
-    "MA": "MASSACHUSETTS",
-    "MI": "MICHIGAN",
-    "MN": "MINNESOTA",
-    "MS": "MISSISSIPPI",
-    "MO": "MISSOURI",
-    "MT": "MONTANA",
-    "NE": "NEBRASKA",
-    "NV": "NEVADA",
-    "NH": "NEW HAMPSHIRE",
-    "NJ": "NEW JERSEY",
-    "NM": "NEW MEXICO",
-    "NY": "NEW YORK",
-    "NC": "NORTH CAROLINA",
-    "ND": "NORTH DAKOTA",
-    "OH": "OHIO",
-    "OK": "OKLAHOMA",
-    "OR": "OREGON",
-    "PA": "PENNSYLVANIA",
-    "RI": "RHODE ISLAND",
-    "SC": "SOUTH CAROLINA",
-    "SD": "SOUTH DAKOTA",
-    "TN": "TENNESSEE",
-    "TX": "TEXAS",
-    "UT": "UTAH",
-    "VT": "VERMONT",
-    "VA": "VIRGINIA",
-    "WA": "WASHINGTON",
-    "WV": "WEST VIRGINIA",
-    "WI": "WISCONSIN",
-    "WY": "WYOMING",
-    "DC": "DISTRICT OF COLUMBIA",
-}
+
+def _assign_nearest_county(sp500: pd.DataFrame, counties: pd.DataFrame) -> pd.DataFrame:
+    """
+    For each firm HQ (lat, lon) in sp500, assign the nearest county
+    based on county centroids (lat_round, lon_round).
+
+    Adds:
+        - county_id_2 : the county id_2 used in lights
+        - county_name : human-readable county name (name_2)
+    """
+    # Drop any weird firms without coordinates
+    sp = sp500.dropna(subset=["lat", "lon"]).copy()
+
+    if sp.empty or counties.empty:
+        raise ValueError(
+            "No valid firms or county centroids to match. "
+            "Check that sp500_clean has lat/lon and lights_monthly_by_coord has lat_round/lon_round."
+        )
+
+    county_coords = counties[["lat_round", "lon_round"]].to_numpy()
+    firm_coords = sp[["lat", "lon"]].to_numpy()
+
+    nearest_ids = []
+    nearest_names = []
+
+    for (flat, flon) in firm_coords:
+        # squared Euclidean distance in lat/lon space (good enough for this use case)
+        d2 = (county_coords[:, 0] - flat) ** 2 + (county_coords[:, 1] - flon) ** 2
+        idx = int(np.argmin(d2))
+        nearest_ids.append(counties.iloc[idx]["id_2"])
+        nearest_names.append(counties.iloc[idx]["name_2"])
+
+    sp["county_id_2"] = nearest_ids
+    sp["county_name"] = nearest_names
+
+    # Put county info back into the full sp500 (in case there were NaNs)
+    result = sp500.copy()
+    result = result.merge(
+        sp[["ticker", "county_id_2", "county_name"]],
+        on="ticker",
+        how="left",
+    )
+
+    return result
 
 
 def build_panel_firms_with_brightness() -> pd.DataFrame:
     """
-    Build a firm × month panel by merging S&P 500 firms with
-    STATE-LEVEL VIIRS brightness.
+    Build a firm × month panel with localized brightness.
 
-    Requirements:
-    - data/raw/sp500_clean.csv must have:
-        - 'ticker'
-        - 'state'  (2-letter code, e.g., 'CA', 'NY', 'TX')
-    - The preprocessed nightlights (build_lights_monthly_by_coord) must
-      produce columns:
-        - 'iso', 'name_1', 'date', 'avg_rad_month'
-      where name_1 is full state name (e.g. 'California')
+    Steps:
+        1. Load sp500_clean (tickers + HQ lat/lon)
+        2. Load county-level nightlights (2018+)
+        3. Assign each firm to nearest county by distance
+        4. Merge to get brightness per firm-month
+
+    Returns a DataFrame with at least:
+        ['ticker', 'company', 'date',
+         'county_id_2', 'county_name',
+         'avg_rad_month', 'brightness',
+         'lat_round', 'lon_round', ...]
     """
+    print("🚧 Building firm × month brightness panel (county-level)...")
 
-    # ---------------------------------------------------------
-    # 1. Load firm-level data
-    # ---------------------------------------------------------
-    sp500 = load_raw_sp500().copy()
-
-    if "ticker" not in sp500.columns:
+    # 1) Firms
+    sp500 = load_sp500_clean().copy()
+    if not {"ticker", "lat", "lon"}.issubset(sp500.columns):
         raise ValueError(
-            f"Expected 'ticker' column in sp500_clean.csv. "
-            f"Columns found: {sp500.columns.tolist()}"
+            "sp500_clean must have columns ['ticker','lat','lon']. "
+            f"Found: {list(sp500.columns)}"
         )
 
-    if "state" not in sp500.columns:
+    print(f"🏢 Loaded {len(sp500)} firms from sp500_clean.csv")
+
+    # 2) County-level lights
+    lights = load_lights_monthly_by_coord().copy()
+    expected_l_cols = {"id_2", "name_2", "date", "avg_rad_month", "lat_round", "lon_round"}
+    if not expected_l_cols.issubset(lights.columns):
         raise ValueError(
-            "sp500_clean.csv must have a 'state' column with 2-letter codes "
-            "(e.g., CA, NY, TX). Please add it and rerun."
+            "lights_monthly_by_coord.csv must have columns "
+            f"{expected_l_cols}. Found: {list(lights.columns)}"
         )
 
-    # Clean up state codes
-    sp500["state_code"] = (
-        sp500["state"]
-        .astype(str)
-        .str.upper()
-        .str.strip()
+    lights["date"] = pd.to_datetime(lights["date"])
+    print(
+        "💡 lights_monthly_by_coord time window:",
+        lights["date"].min(),
+        "→",
+        lights["date"].max(),
     )
 
-    # Drop any rows with invalid or unknown codes (like 'NAN')
-    valid_codes = set(STATE_ABBREV_TO_NAME.keys())
-    mask_valid = sp500["state_code"].isin(valid_codes)
+    # Unique county centroids from lights
+    counties = (
+        lights[["id_2", "name_2", "lat_round", "lon_round"]]
+        .dropna(subset=["lat_round", "lon_round"])
+        .drop_duplicates("id_2")
+        .reset_index(drop=True)
+    )
+    print(f"🗺 Using {len(counties)} distinct counties for nearest-HQ mapping")
 
-    if not mask_valid.all():
-        bad_codes = sp500.loc[~mask_valid, "state_code"].unique().tolist()
+    # 3) Assign nearest county for each firm HQ
+    sp500_with_county = _assign_nearest_county(sp500, counties)
+
+    missing_county = sp500_with_county["county_id_2"].isna().sum()
+    if missing_county > 0:
         print(
-            f"⚠️ Dropping {len(sp500) - mask_valid.sum()} firms with unknown state codes: {bad_codes}"
-        )
-        sp500 = sp500[mask_valid].copy()
-
-    # Map to full state names
-    sp500["state_name"] = sp500["state_code"].map(STATE_ABBREV_TO_NAME)
-    sp500["state_name"] = sp500["state_name"].str.upper().str.strip()
-
-    # ---------------------------------------------------------
-    # 2. Load region-based nightlights
-    # ---------------------------------------------------------
-    lights = build_lights_monthly_by_coord().copy()
-
-    required_cols = {"iso", "name_1", "date", "avg_rad_month"}
-    missing = required_cols - set(lights.columns)
-    if missing:
-        raise ValueError(
-            f"Region-based lights missing columns: {missing}. "
-            f"Columns found: {lights.columns.tolist()}"
+            f"⚠️ Warning: {missing_county} firms could not be matched to any county. "
+            "They will be dropped from the brightness panel."
         )
 
-    # Keep USA only, just in case
-    lights = lights[lights["iso"] == "USA"].copy()
+    sp500_with_county = sp500_with_county.dropna(subset=["county_id_2"]).copy()
 
-    # Standardize state names in lights
-    lights["state_name"] = lights["name_1"].astype(str).str.upper().str.strip()
-
-    # ---------------------------------------------------------
-    # 3. Aggregate to STATE × DATE
-    # ---------------------------------------------------------
-    lights_state = (
-        lights.groupby(["state_name", "date"], as_index=False)["avg_rad_month"]
-        .mean()
+    # 4) Merge firms with county-month brightness
+    panel = sp500_with_county.merge(
+        lights[
+            [
+                "id_2",
+                "date",
+                "avg_rad_month",
+                "lat_round",
+                "lon_round",
+            ]
+        ],
+        left_on="county_id_2",
+        right_on="id_2",
+        how="inner",
     )
 
-    # ---------------------------------------------------------
-    # 4. Build firm × month panel: merge on state_name
-    # ---------------------------------------------------------
-    panel = sp500.merge(
-        lights_state,
-        on="state_name",
-        how="left",   # many firms per state, many dates
-        validate="m:m",
-    )
+    panel = panel.rename(columns={"id_2": "county_fips"})
 
-    # Ensure date is datetime
-    if "date" in panel.columns:
-        panel["date"] = pd.to_datetime(panel["date"], errors="coerce")
+    # Alias for features / plots
+    panel["brightness"] = panel["avg_rad_month"]
+
+    print(f"✅ Built firm × month brightness panel with {len(panel)} rows")
+    print(
+        "   Date range:",
+        panel["date"].min(),
+        "→",
+        panel["date"].max(),
+    )
+    print(
+        "   Example columns:",
+        [c for c in panel.columns if c in ("ticker", "company", "date", "county_name", "brightness")],
+    )
 
     return panel

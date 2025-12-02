@@ -1,89 +1,158 @@
 # src/preprocess_lights.py
 
 import pandas as pd
-from pathlib import Path
 
-from .load_data import load_raw_lights
-from .config import DATA_INTER
+from .load_data import (
+    load_raw_lights,
+    save_lights_monthly_by_coord,
+)
+
+# Public county centroid file (FIPS + lat/lon)
+COUNTY_CENTROIDS_URL = (
+    "https://gist.githubusercontent.com/russellsamora/"
+    "12be4f9f574e92413ea3f92ce1bc58e6/raw/us_county_latlng.csv"
+)
+
+
+def _load_county_centroids() -> pd.DataFrame:
+    """
+    Load US county centroids (FIPS, name, lat, lon) from a CSV.
+
+    We don't trust the exact column names ahead of time, so we:
+      - read with default CSV settings
+      - auto-detect the FIPS column
+      - auto-detect latitude and longitude columns
+    and normalize to: ['fips_code', 'lat', 'lng'].
+    """
+    print(f"🗺 Fetching county centroids from {COUNTY_CENTROIDS_URL} ...")
+    df = pd.read_csv(COUNTY_CENTROIDS_URL)
+
+    print("🗺 County centroid raw columns:", df.columns.tolist())
+
+    # Find FIPS-like column
+    fips_candidates = [c for c in df.columns if "fip" in c.lower()]
+    if not fips_candidates:
+        raise ValueError(
+            "Could not find a FIPS column in county centroid file. "
+            f"Columns are: {df.columns.tolist()}"
+        )
+    fips_col = fips_candidates[0]
+
+    # Find latitude and longitude columns
+    lat_candidates = [c for c in df.columns if "lat" in c.lower()]
+    lon_candidates = [c for c in df.columns if "lon" in c.lower() or "lng" in c.lower()]
+    if not lat_candidates or not lon_candidates:
+        raise ValueError(
+            "Could not find latitude/longitude columns in county centroid file. "
+            f"Columns are: {df.columns.tolist()}"
+        )
+
+    lat_col = lat_candidates[0]
+    lon_col = lon_candidates[0]
+
+    df["fips_code"] = df[fips_col].astype(str).str.zfill(5)
+    df = df.rename(columns={lat_col: "lat", lon_col: "lng"})
+
+    print("🗺 Normalized centroid columns:", df[["fips_code", "lat", "lng"]].head())
+
+    return df[["fips_code", "lat", "lng"]]
 
 
 def build_lights_monthly_by_coord() -> pd.DataFrame:
     """
-    Build a region-based (state-level) monthly nightlights panel from the
-    raw VIIRS level-2 file.
+    Build a monthly county-level brightness panel for the US with coordinates.
 
-    Input (from load_raw_lights / LIGHTS_URL) is expected to have columns:
-        - iso        (country code, e.g. 'USA')
-        - id_1       (first admin level id)
-        - name_1     (first admin level name, e.g. 'California')
-        - id_2       (second admin level id)
-        - name_2     (second admin level name, e.g. county)
-        - year       (int)
-        - month      (int)
-        - nlsum      (sum of radiance over the region)
-        - area       (area of the region)
-
-    We:
-        1) Filter to USA
-        2) Create a proper datetime 'date' column
-        3) Trim to dates >= 2018-01-01 (your chosen analysis window)
-        4) Compute avg_rad_month = nlsum / area
-        5) Aggregate by (iso, id_1, name_1, id_2, name_2, date)
-        6) Save to data/intermediate/lights_monthly_by_coord.csv
-
-    Note: despite the function name, this is now a REGION-based panel
-    (state / subregion), not raw lat/lon coordinates.
+    Output columns:
+        ['iso', 'id_1', 'name_1', 'id_2', 'name_2',
+         'date', 'avg_rad_month', 'lat_round', 'lon_round']
     """
-
+    print("🚧 Building county-level nightlights panel...")
     print("📥 Loading raw nightlights data...")
-    lights = load_raw_lights().copy()
-    print(f"👉 Raw columns: {lights.columns.tolist()}")
+    lights_raw = load_raw_lights().copy()
 
-    expected_cols = {"iso", "id_1", "name_1", "id_2", "name_2", "year", "month", "nlsum", "area"}
-    missing = expected_cols - set(lights.columns)
-    if missing:
+    print("👉 Raw columns:", list(lights_raw.columns))
+
+    # Keep only USA
+    if "iso" in lights_raw.columns:
+        lights = lights_raw[lights_raw["iso"] == "USA"].copy()
+    else:
+        lights = lights_raw.copy()
+        lights["iso"] = "USA"
+
+    # Ensure year/month exist
+    if "year" not in lights.columns or "month" not in lights.columns:
         raise ValueError(
-            f"Raw lights data is missing columns: {missing}. "
-            f"Found columns: {lights.columns.tolist()}"
+            "Expected 'year' and 'month' columns in nightlights data, "
+            f"found: {list(lights.columns)}"
         )
 
-    # 1) Filter to USA only
-    print("🌎 Filtering to iso == 'USA'...")
-    lights = lights[lights["iso"] == "USA"].copy()
-
-    # 2) Ensure datetime 'date' column from year/month
-    print("🛠 Ensuring datetime 'date' column...")
-    lights["year"] = pd.to_numeric(lights["year"], errors="coerce").astype("Int64")
-    lights["month"] = pd.to_numeric(lights["month"], errors="coerce").astype("Int64")
+    # Build datetime month
+    lights["year"] = pd.to_numeric(lights["year"], errors="coerce")
+    lights["month"] = pd.to_numeric(lights["month"], errors="coerce")
+    lights = lights.dropna(subset=["year", "month"])
+    lights["year"] = lights["year"].astype(int)
+    lights["month"] = lights["month"].astype(int)
 
     lights["date"] = pd.to_datetime(
-        dict(year=lights["year"], month=lights["month"], day=1),
-        errors="coerce",
+        dict(year=lights["year"], month=lights["month"], day=1)
     )
 
-    # 3) Trim to your real analysis window: 2018+
+    # *** IMPORTANT: use 2018+ window ***
     cutoff = pd.Timestamp("2018-01-01")
-    print(f"✂️ Trimming to dates >= {cutoff.date()}...")
-    lights = lights[lights["date"] >= cutoff].copy()
+    lights = lights.loc[lights["date"] >= cutoff].copy()
+    print(
+        f"📆 Nightlights time window after filter: "
+        f"{lights['date'].min()} → {lights['date'].max()}"
+    )
 
-    # 4) Compute average radiance per area
-    print("💡 Computing avg_rad_month = nlsum / area...")
+    # Compute average radiance per area (nlsum / area)
+    for col in ["nlsum", "area"]:
+        if col not in lights.columns:
+            raise ValueError(
+                f"Expected column '{col}' in nightlights data. "
+                f"Found: {list(lights.columns)}"
+            )
+
     lights["avg_rad_month"] = lights["nlsum"] / lights["area"]
 
-    # 5) Aggregate to a stable region-month panel
-    print("📊 Aggregating by ['iso', 'id_1', 'name_1', 'id_2', 'name_2', 'date']...")
+    # Aggregate by administrative unit + date
     group_cols = ["iso", "id_1", "name_1", "id_2", "name_2", "date"]
-    lights_panel = (
+    agg = (
         lights.groupby(group_cols, as_index=False)["avg_rad_month"]
         .mean()
+        .reset_index(drop=True)
     )
 
-    # 6) Save to data/intermediate
-    DATA_INTER.mkdir(parents=True, exist_ok=True)
-    out_path = DATA_INTER / "lights_monthly_by_coord.csv"
-    print(f"💾 Writing region-based lights panel to {out_path}...")
-    lights_panel.to_csv(out_path, index=False)
-    print("✅ Finished building lights_monthly_by_coord.csv (region-based, 2018+).")
+    print("📊 Aggregated nightlights rows:", len(agg))
 
-    return lights_panel
+    # Attach county centroids to get lat/lon for globe and distance matching
+    county_centroids = _load_county_centroids()
 
+    # We assume id_2 is a FIPS-like county code
+    agg["id_2_str"] = agg["id_2"].astype(str).str.zfill(5)
+
+    merged = agg.merge(
+        county_centroids,
+        left_on="id_2_str",
+        right_on="fips_code",
+        how="left",
+    )
+
+    missing_coord = merged["lat"].isna().sum()
+    if missing_coord > 0:
+        print(
+            f"⚠️ Warning: {missing_coord} county-month rows have no centroid match "
+            "(id_2 not found in county list). They will keep NaN lat/lon but are still usable."
+        )
+
+    merged = merged.drop(columns=["fips_code", "id_2_str"])
+    merged = merged.rename(columns={"lat": "lat_round", "lng": "lon_round"})
+
+    print(
+        "💾 Writing lights_monthly_by_coord.csv with columns:",
+        list(merged.columns),
+    )
+    save_lights_monthly_by_coord(merged)
+
+    print("✅ Finished building lights_monthly_by_coord.csv (county-level, 2018+).")
+    return merged
