@@ -4,7 +4,7 @@ from src.load_data import load_model_data
 
 st.title("Raw Data View")
 
-df = load_model_data(fallback_if_missing=True).copy()
+df = load_model_data(fallback_if_missing=False).copy()
 df["date"] = df["date"].astype("datetime64[ns]")
 
 st.write("Filtered view of the final modeling dataset.")
