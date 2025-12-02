@@ -1,188 +1,190 @@
 # pages/1_Overview.py
 
 import streamlit as st
-import altair as alt
-import numpy as np
 import pandas as pd
+import numpy as np
 
 from src.load_data import load_model_data
-from src.utils import compute_deciles
 
-st.title("Overview: Brightness vs Future Returns")
+st.title("📊 Overview: Nightlights & Returns")
 
-# 🔒 Force real data – no AAA/BBB/CCC fallback
-df = load_model_data(fallback_if_missing=False).copy()
-df["date"] = df["date"].astype("datetime64[ns]")
+df = load_model_data(fallback_if_missing=False)
 
-required = {"ticker", "date", "brightness_change", "ret_fwd"}
-missing = required - set(df.columns)
-if missing:
-    st.error(f"Missing columns in nightlights_model_data.csv: {missing}")
+if df.empty:
+    st.error(
+        "Final model data is empty or missing.\n\n"
+        "Run `python scripts/build_all.py` locally or in Codespaces to generate "
+        "`data/final/nightlights_model_data.csv`, commit it, and redeploy."
+    )
     st.stop()
 
-# ---------------------------------------------------------
-# Sidebar filters
-# ---------------------------------------------------------
-st.sidebar.header("Filters (Overview)")
+# Basic cleaning / types
+if "date" in df.columns:
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
-min_date, max_date = df["date"].min(), df["date"].max()
+df = df.dropna(subset=["date"])
+
+# --- Sidebar / filters -------------------------------------------------
+st.sidebar.header("Filters")
+
+# Ticker filter
+tickers = sorted(df["ticker"].unique()) if "ticker" in df.columns else []
+selected_tickers = st.sidebar.multiselect(
+    "Select tickers (leave empty for all):",
+    options=tickers,
+    default=[],
+)
+
+# Date range filter
+min_date = df["date"].min()
+max_date = df["date"].max()
 date_range = st.sidebar.slider(
-    "Date range",
+    "Date range:",
     min_value=min_date.to_pydatetime(),
     max_value=max_date.to_pydatetime(),
     value=(min_date.to_pydatetime(), max_date.to_pydatetime()),
-    format="YYYY-MM",
-)
-start, end = date_range
-mask_date = (df["date"] >= start) & (df["date"] <= end)
-
-all_tickers = sorted(df["ticker"].unique().tolist())
-selected_tickers = st.sidebar.multiselect(
-    "Tickers",
-    options=all_tickers,
-    default=all_tickers if len(all_tickers) <= 50 else all_tickers[:50],
-)
-mask_ticker = df["ticker"].isin(selected_tickers) if selected_tickers else True
-
-q_low, q_high = df["brightness_change"].quantile(0.01), df["brightness_change"].quantile(0.99)
-bmin, bmax = st.sidebar.slider(
-    "Brightness change range",
-    min_value=float(np.round(q_low, 2)),
-    max_value=float(np.round(q_high, 2)),
-    value=(float(np.round(q_low, 2)), float(np.round(q_high, 2))),
-)
-mask_bright = df["brightness_change"].between(bmin, bmax)
-
-f = df[mask_date & mask_ticker & mask_bright].copy()
-if f.empty:
-    st.warning("No data for selected filters.")
-    st.stop()
-
-# ---------------------------------------------------------
-# KPIs
-# ---------------------------------------------------------
-c1, c2, c3, c4 = st.columns(4)
-with c1:
-    st.metric("Obs", f"{len(f):,}")
-with c2:
-    st.metric("Avg brightness change", f"{f['brightness_change'].mean():.3f}")
-with c3:
-    st.metric("Avg next-month return", f"{f['ret_fwd'].mean()*100:.2f}%")
-with c4:
-    corr = f["brightness_change"].corr(f["ret_fwd"])
-    st.metric("Corr(bright, ret)", f"{corr:.3f}" if not np.isnan(corr) else "N/A")
-
-st.markdown("---")
-
-# ---------------------------------------------------------
-# Time-series chart
-# ---------------------------------------------------------
-st.subheader("Time-series: average brightness change & future returns")
-
-ts = (
-    f.groupby("date", as_index=False)[["brightness_change", "ret_fwd"]]
-    .mean()
-    .rename(columns={
-        "ret_fwd": "Next-month return",
-        "brightness_change": "Brightness change"
-    })
 )
 
-base = alt.Chart(ts).encode(x="date:T")
-
-line_bright = base.mark_line().encode(
-    y=alt.Y("Brightness change:Q", axis=alt.Axis(title="Brightness change (avg)")),
+mask = (df["date"] >= pd.to_datetime(date_range[0])) & (
+    df["date"] <= pd.to_datetime(date_range[1])
 )
 
-line_ret = base.mark_line(strokeDash=[4, 4]).encode(
-    y=alt.Y("Next-month return:Q", axis=alt.Axis(title="Next-month return (avg)")),
-    color=alt.value("#FF7F0E"),
+if selected_tickers:
+    mask &= df["ticker"].isin(selected_tickers)
+
+df_filt = df[mask].copy()
+
+st.caption(
+    f"Filtered to **{len(df_filt):,}** rows "
+    f"({len(df_filt['ticker'].nunique()) if 'ticker' in df_filt.columns else 0} tickers) "
+    f"from {df_filt['date'].min().date()} to {df_filt['date'].max().date()}."
 )
 
-st.altair_chart(
-    alt.layer(line_bright, line_ret).resolve_scale(y="independent").interactive(),
-    use_container_width=True,
-)
+# --- High-level metrics ------------------------------------------------
+col1, col2, col3, col4 = st.columns(4)
 
-# ---------------------------------------------------------
-# Scatter plot
-# ---------------------------------------------------------
-st.subheader("Scatter: brightness change vs next-month return")
+with col1:
+    st.metric("Tickers", df_filt["ticker"].nunique() if "ticker" in df_filt.columns else 0)
 
-scatter = (
-    alt.Chart(f)
-    .mark_circle(size=40, opacity=0.5)
-    .encode(
-        x=alt.X("brightness_change:Q", title="Brightness change"),
-        y=alt.Y("ret_fwd:Q", title="Next-month return"),
-        tooltip=["ticker", "date:T", "brightness_change", "ret_fwd"],
+with col2:
+    if "state_name" in df_filt.columns:
+        st.metric("States", df_filt["state_name"].nunique())
+    else:
+        st.metric("States", "—")
+
+with col3:
+    if "ret" in df_filt.columns:
+        avg_ret = df_filt["ret"].mean()
+        st.metric("Avg monthly return", f"{avg_ret*100:.2f}%")
+    else:
+        st.metric("Avg monthly return", "—")
+
+with col4:
+    if "brightness_change" in df_filt.columns:
+        avg_bchg = df_filt["brightness_change"].mean()
+        st.metric("Avg brightness change", f"{avg_bchg:.4f}")
+    else:
+        st.metric("Avg brightness change", "—")
+
+st.divider()
+
+# --- Time series: average brightness over time -------------------------
+st.subheader("Average Nightlights Over Time")
+
+if "avg_rad_month" in df_filt.columns:
+    if "state_name" in df_filt.columns:
+        group_level = st.radio(
+            "Aggregate level:",
+            ["All firms", "By state"],
+            horizontal=True,
+        )
+    else:
+        group_level = "All firms"
+
+    if group_level == "All firms" or "state_name" not in df_filt.columns:
+        ts = (
+            df_filt.groupby("date")["avg_rad_month"]
+            .mean()
+            .reset_index()
+            .sort_values("date")
+        )
+        ts = ts.set_index("date")
+        st.line_chart(ts, height=300)
+    else:
+        # Show top 5 states by average brightness and plot them
+        state_avg = (
+            df_filt.groupby("state_name")["avg_rad_month"]
+            .mean()
+            .sort_values(ascending=False)
+        )
+        top_states = state_avg.head(5).index.tolist()
+
+        st.caption(f"Showing top 5 states by average brightness: {', '.join(top_states)}")
+
+        subset = df_filt[df_filt["state_name"].isin(top_states)].copy()
+        ts_multi = (
+            subset.groupby(["date", "state_name"])["avg_rad_month"]
+            .mean()
+            .reset_index()
+            .sort_values(["state_name", "date"])
+        )
+
+        # Pivot for multi-line chart
+        pivot = ts_multi.pivot(index="date", columns="state_name", values="avg_rad_month")
+        st.line_chart(pivot, height=350)
+else:
+    st.info("Column `avg_rad_month` not found in the dataset.")
+
+st.divider()
+
+# --- Relationship: brightness_change vs future returns -----------------
+st.subheader("Brightness Changes vs Next-Month Returns")
+
+if {"brightness_change", "ret_fwd_1m"}.issubset(df_filt.columns):
+    corr = df_filt[["brightness_change", "ret_fwd_1m"]].corr().iloc[0, 1]
+    st.write(f"Correlation between **brightness_change** and **next-month return**: `{corr:.3f}`")
+
+    st.caption("Each point is a (ticker, month) observation in your filtered sample.")
+    st.scatter_chart(
+        df_filt[["brightness_change", "ret_fwd_1m"]].rename(
+            columns={"brightness_change": "Brightness change", "ret_fwd_1m": "Next-month return"}
+        )
     )
-    .interactive()
-)
-
-st.altair_chart(scatter, use_container_width=True)
-
-# ---------------------------------------------------------
-# Decile portfolios (chart)
-# ---------------------------------------------------------
-st.subheader("Decile portfolios by brightness change")
-
-dec = compute_deciles(f, "brightness_change", q=10, label_col="brightness_decile")
-dec_ret = (
-    dec.groupby("brightness_decile", as_index=False)["ret_fwd"]
-    .mean()
-    .rename(columns={"ret_fwd": "Avg next-month return"})
-)
-
-bar = (
-    alt.Chart(dec_ret)
-    .mark_bar()
-    .encode(
-        x=alt.X("brightness_decile:O", title="Brightness decile (0=lowest, 9=highest)"),
-        y=alt.Y("Avg next-month return:Q", title="Avg next-month return"),
-        tooltip=["brightness_decile", "Avg next-month return"],
+else:
+    st.info(
+        "Need columns `brightness_change` and `ret_fwd_1m` to show this chart. "
+        "Make sure your pipeline created those features."
     )
-)
 
-st.altair_chart(bar, use_container_width=True)
+st.divider()
 
-st.markdown("---")
+# --- Single-ticker detail view -----------------------------------------
+st.subheader("Single Ticker View")
 
-# ---------------------------------------------------------
-# TABLE 1: Summary statistics (for professor)
-# ---------------------------------------------------------
-st.subheader("Table 1: Summary statistics")
+if "ticker" in df_filt.columns:
+    default_ticker = selected_tickers[0] if selected_tickers else df_filt["ticker"].iloc[0]
+    tkr = st.selectbox("Choose a ticker:", options=sorted(df_filt["ticker"].unique()), index=sorted(df_filt["ticker"].unique()).index(default_ticker))
 
-summary_cols = ["brightness_change", "ret_fwd"]
-summary = f[summary_cols].agg(
-    ["count", "mean", "std", "min", "max"]
-).T.reset_index().rename(columns={"index": "Variable"})
+    df_tkr = df_filt[df_filt["ticker"] == tkr].sort_values("date").copy()
 
-st.dataframe(summary, use_container_width=True)
+    c1, c2 = st.columns(2)
 
-# ---------------------------------------------------------
-# TABLE 2: Decile portfolio table (for professor)
-# ---------------------------------------------------------
-st.subheader("Table 2: Decile portfolios based on brightness change")
+    with c1:
+        st.markdown(f"**{tkr}: Brightness vs Time**")
+        if "avg_rad_month" in df_tkr.columns:
+            series_b = df_tkr.set_index("date")["avg_rad_month"]
+            st.line_chart(series_b, height=250)
+        else:
+            st.info("`avg_rad_month` missing.")
 
-dec_table = (
-    dec.groupby("brightness_decile")
-    .agg(
-        n_obs=("ret_fwd", "size"),
-        avg_brightness_change=("brightness_change", "mean"),
-        avg_next_month_return=("ret_fwd", "mean"),
-    )
-    .reset_index()
-    .rename(
-        columns={
-            "brightness_decile": "Decile",
-            "n_obs": "Obs",
-            "avg_brightness_change": "Avg brightness change",
-            "avg_next_month_return": "Avg next-month return",
-        }
-    )
-)
+    with c2:
+        st.markdown(f"**{tkr}: Monthly Returns**")
+        if "ret" in df_tkr.columns:
+            series_r = df_tkr.set_index("date")["ret"]
+            st.line_chart(series_r, height=250)
+        else:
+            st.info("`ret` missing.")
 
-st.dataframe(dec_table, use_container_width=True)
-
-
+    st.caption("Use this to tell the story for specific companies in your writeup.")
+else:
+    st.info("No `ticker` column found in the dataset.")

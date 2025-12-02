@@ -1,101 +1,68 @@
 # app.py
 
 import streamlit as st
-
 from src.load_data import load_model_data
-from src.modeling import run_basic_regression
 
 st.set_page_config(
-    page_title="Nightlights x Stock Returns",
+    page_title="Nightlights & Stock Returns",
     page_icon="🌃",
     layout="wide",
 )
 
-# ---------------------------------------------------------
-# Header
-# ---------------------------------------------------------
-st.title("🌃 Nightlights × Stock Returns")
-st.caption("FIN 377 • VIIRS night-time lights and S&P 500 performance")
+st.title("🌃 Nightlights & Stock Returns Dashboard")
+st.markdown(
+    """
+Welcome to the FIN 377 Nightlights project app.
 
-# ---------------------------------------------------------
-# Load data
-# ---------------------------------------------------------
-df = load_model_data(fallback_if_missing=False)
+This dashboard connects **VIIRS nighttime lights** with **S&P 500 stock returns**.
 
+Use the pages in the sidebar to:
+- 📊 See an overview of the dataset and basic patterns  
+- 🔍 Explore individual tickers  
+- 🗺 Look at patterns by state (if you add that page)  
+- 🤖 Run model-style regressions of brightness changes vs future returns (if you add that page)
 
-required_cols = {"ticker", "date", "brightness_change", "ret_fwd"}
-missing = required_cols - set(df.columns)
+The main dataset driving this app is:
 
-if missing:
+`data/final/nightlights_model_data.csv`
+
+It was built using:
+- **State-level VIIRS nightlights** (trimmed to recent years)
+- **S&P 500 firm locations** (lat/lon mapped to US states)
+- **Monthly returns from Yahoo Finance** (2018+)
+    """
+)
+
+# Quick sanity check: show a tiny summary so you know the app is wired
+try:
+    df = load_model_data(fallback_if_missing=False)
+    if df.empty:
+        st.warning(
+            "`nightlights_model_data.csv` is empty. "
+            "Double-check that `python scripts/build_all.py` ran successfully."
+        )
+    else:
+        st.subheader("Quick Data Check")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Rows", f"{len(df):,}")
+        with col2:
+            st.metric("Unique tickers", df["ticker"].nunique() if "ticker" in df.columns else "—")
+        with col3:
+            if "date" in df.columns:
+                st.metric(
+                    "Date range",
+                    f"{df['date'].min().date()} → {df['date'].max().date()}"
+                )
+            else:
+                st.metric("Date range", "—")
+
+        st.caption("Preview of the final dataset:")
+        st.dataframe(df.head())
+except FileNotFoundError as e:
     st.error(
-        f"Final dataset is missing required columns: {missing}. "
-        "Make sure you ran the pipeline (scripts/build_all.py) "
-        "and that nightlights_model_data.csv has those columns."
+        f"Could not find the final model data.\n\n"
+        f"{e}\n\n"
+        "Run `python scripts/build_all.py` in your repo and redeploy."
     )
-else:
-    st.success(f"Loaded {len(df):,} firm–month observations.")
-
-# ---------------------------------------------------------
-# Project description
-# ---------------------------------------------------------
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("What this project does")
-    st.markdown(
-        """
-        This project links **NASA/NOAA VIIRS night-time lights** to **S&P 500 stocks**:
-
-        - Each firm is geocoded to a latitude/longitude.
-        - We aggregate VIIRS brightness by location and month.
-        - We compute **brightness changes** (growth in light intensity).
-        - We test whether those changes predict **next-month stock returns**.
-
-        Mathematically, we estimate regressions of the form:
-
-        \n
-        \\[
-        r_{i, t+1} = \\alpha + \\beta \\cdot \\Delta \\text{Brightness}_{i, t} + \\varepsilon_{i, t+1}
-        \\]
-
-        where:
-        - \( r_{i, t+1} \) is the stock's next-month return
-        - \( \\Delta \\text{Brightness}_{i, t} \) is the change in VIIRS brightness
-        """
-    )
-
-with col2:
-    st.subheader("Regression snapshot")
-    try:
-        results = run_basic_regression()
-        st.metric("β (brightness_change)", f"{results['beta_brightness']:.4f}")
-        st.metric("t-stat (brightness_change)", f"{results['t_brightness']:.2f}")
-        st.metric("R²", f"{results['r2']:.3f}")
-        st.caption(f"Observations used: {results['n_obs']:,}")
-        with st.expander("Show full regression summary"):
-            st.text(results["summary"])
-    except Exception as e:
-        st.warning(f"Regression could not run yet: {e}")
-
-st.markdown("---")
-
-st.subheader("How to explore the data")
-
-st.markdown(
-    """
-    Use the **pages in the left sidebar** to dig into the results:
-
-    1. **Overview** – time-series plots, scatter of brightness vs returns, decile portfolios  
-    2. **Ticker Explorer** – drill into specific firms (brightness over time, returns over time)  
-    3. **Raw Data** – table + CSV download of the final modeling dataset  
-    4. **Globe** – interactive VIIRS brightness globe by month  
-    """
-)
-
-st.markdown(
-    """
-    Once your pipeline is fully connected to the real data, this app becomes
-    a live explorer for your FIN 377 nightlight trading idea.
-    """
-)
 
