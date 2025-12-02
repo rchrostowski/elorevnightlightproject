@@ -9,103 +9,80 @@ from .config import DATA_INTER
 
 def build_lights_monthly_by_coord() -> pd.DataFrame:
     """
-    Build a monthly nightlights panel from the 'level2' VIIRS file:
+    Build a region-based (state-level) monthly nightlights panel from the
+    raw VIIRS level-2 file.
 
-    Columns in raw file (from your CSV):
-    ['iso', 'id_1', 'name_1', 'id_2', 'name_2', 'year', 'month', 'nlsum', 'area', 'date']
+    Input (from load_raw_lights / LIGHTS_URL) is expected to have columns:
+        - iso        (country code, e.g. 'USA')
+        - id_1       (first admin level id)
+        - name_1     (first admin level name, e.g. 'California')
+        - id_2       (second admin level id)
+        - name_2     (second admin level name, e.g. county)
+        - year       (int)
+        - month      (int)
+        - nlsum      (sum of radiance over the region)
+        - area       (area of the region)
 
-    We will:
-    - Keep USA only (iso == 'USA')
-    - Ensure a proper datetime 'date' column
-    - Optionally trim to recent years (e.g. 2020+)
-    - Compute brightness as nlsum / area
-    - Aggregate by (iso, id_1, name_1, id_2, name_2, date)
-    - Save to data/intermediate/lights_monthly_by_coord.csv
+    We:
+        1) Filter to USA
+        2) Create a proper datetime 'date' column
+        3) Trim to dates >= 2020-01-01 (to keep things small/modern)
+        4) Compute avg_rad_month = nlsum / area
+        5) Aggregate by (iso, id_1, name_1, id_2, name_2, date)
+        6) Save to data/intermediate/lights_monthly_by_coord.csv
 
-    NOTE: Despite the function name mentioning "coord", this file is
-    region-based (admin level), not lat/lon grid based.
+    Note: despite the function name, this is now a REGION-based panel
+    (state / subregion), not raw lat/lon coordinates.
     """
 
     print("📥 Loading raw nightlights data...")
     lights = load_raw_lights().copy()
+    print(f"👉 Raw columns: {lights.columns.tolist()}")
 
-    # ---------------------------------------------------------
-    # 1. Filter to USA only (you can remove this if you want global)
-    # ---------------------------------------------------------
-    if "iso" in lights.columns:
-        print("🌎 Filtering to iso == 'USA'...")
-        lights = lights[lights["iso"] == "USA"]
-
-    if lights.empty:
-        raise ValueError("Nightlights data is empty after filtering iso == 'USA'.")
-
-    # ---------------------------------------------------------
-    # 2. Ensure we have a proper datetime 'date' column
-    # ---------------------------------------------------------
-    print("🛠 Ensuring datetime 'date' column...")
-
-    if "date" in lights.columns:
-        lights["date"] = pd.to_datetime(lights["date"], errors="coerce")
-    elif "year" in lights.columns and "month" in lights.columns:
-        lights["date"] = pd.to_datetime(
-            lights["year"].astype(str) + "-" + lights["month"].astype(str),
-            errors="coerce",
-        )
-    else:
+    expected_cols = {"iso", "id_1", "name_1", "id_2", "name_2", "year", "month", "nlsum", "area"}
+    missing = expected_cols - set(lights.columns)
+    if missing:
         raise ValueError(
-            "VIIRS file must have either 'date' or 'year'+'month' columns."
-        )
-
-    lights = lights.dropna(subset=["date"])
-
-    # ---------------------------------------------------------
-    # 3. Aggressive TRIM to recent years only (to keep pipeline light)
-    #    Adjust CUTOFF_DATE if you want more/less history.
-    # ---------------------------------------------------------
-    CUTOFF_DATE = "2020-01-01"
-    print(f"✂️ Trimming to dates >= {CUTOFF_DATE}...")
-    lights = lights[lights["date"] >= CUTOFF_DATE]
-
-    if lights.empty:
-        raise ValueError(
-            f"Nightlights data is empty after trimming to date >= {CUTOFF_DATE}."
-        )
-
-    # ---------------------------------------------------------
-    # 4. Compute brightness measure from nlsum and area
-    # ---------------------------------------------------------
-    # Your file has 'nlsum' (sum of lights) and 'area' (area of polygon).
-    # We'll define avg_rad_month = nlsum / area.
-    if "nlsum" not in lights.columns or "area" not in lights.columns:
-        raise ValueError(
-            "Expected columns 'nlsum' and 'area' in VIIRS file. "
+            f"Raw lights data is missing columns: {missing}. "
             f"Found columns: {lights.columns.tolist()}"
         )
 
+    # 1) Filter to USA only
+    print("🌎 Filtering to iso == 'USA'...")
+    lights = lights[lights["iso"] == "USA"].copy()
+
+    # 2) Ensure datetime 'date' column from year/month
+    print("🛠 Ensuring datetime 'date' column...")
+    lights["year"] = pd.to_numeric(lights["year"], errors="coerce").astype("Int64")
+    lights["month"] = pd.to_numeric(lights["month"], errors="coerce").astype("Int64")
+
+    lights["date"] = pd.to_datetime(
+        dict(year=lights["year"], month=lights["month"], day=1),
+        errors="coerce",
+    )
+
+    # 3) Trim to modern period (2020+ to keep file small and relevant)
+    cutoff = pd.Timestamp("2020-01-01")
+    print(f"✂️ Trimming to dates >= {cutoff.date()}...")
+    lights = lights[lights["date"] >= cutoff].copy()
+
+    # 4) Compute average radiance per area
     print("💡 Computing avg_rad_month = nlsum / area...")
     lights["avg_rad_month"] = lights["nlsum"] / lights["area"]
 
-    # ---------------------------------------------------------
-    # 5. Aggregate by region and date
-    # ---------------------------------------------------------
+    # 5) Aggregate to a stable region-month panel
+    print("📊 Aggregating by ['iso', 'id_1', 'name_1', 'id_2', 'name_2', 'date']...")
     group_cols = ["iso", "id_1", "name_1", "id_2", "name_2", "date"]
-
-    print(f"📊 Aggregating by {group_cols}...")
-    grouped = (
+    lights_panel = (
         lights.groupby(group_cols, as_index=False)["avg_rad_month"]
         .mean()
     )
 
-    # ---------------------------------------------------------
-    # 6. Save to data/intermediate/lights_monthly_by_coord.csv
-    #    (name kept for compatibility with rest of pipeline)
-    # ---------------------------------------------------------
-    output_path = DATA_INTER / "lights_monthly_by_coord.csv"
-
-    print(f"💾 Writing region-based lights panel to {output_path}...")
-    grouped.to_csv(output_path, index=False)
-
+    # 6) Save to data/intermediate
+    DATA_INTER.mkdir(parents=True, exist_ok=True)
+    out_path = DATA_INTER / "lights_monthly_by_coord.csv"
+    print(f"💾 Writing region-based lights panel to {out_path}...")
+    lights_panel.to_csv(out_path, index=False)
     print("✅ Finished building lights_monthly_by_coord.csv (region-based).")
 
-    return grouped
-
+    return lights_panel
