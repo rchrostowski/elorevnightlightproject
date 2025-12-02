@@ -1,33 +1,78 @@
 # src/load_data.py
+
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from .config import DATA_RAW, DATA_FINAL, MODEL_DATA_FILE
+
+from .config import (
+    DATA_RAW,
+    DATA_INTER,
+    DATA_FINAL,
+    LIGHTS_RAW_FILE,
+    SP500_RAW_FILE,
+    RETURNS_RAW_FILE,
+    MODEL_DATA_FILE,
+)
+
+# ---------------------------------------------------------
+# Raw loaders
+# ---------------------------------------------------------
 
 def load_raw_lights() -> pd.DataFrame:
-    path = DATA_RAW / "VIIRS-nighttime-lights-2013m1to2024m5-level2.csv"
+    """
+    Load the raw VIIRS nightlights CSV.
+    Expects the file specified by LIGHTS_RAW_FILE in data/raw/.
+    """
+    path = DATA_RAW / LIGHTS_RAW_FILE
+    if not path.exists():
+        raise FileNotFoundError(f"Nightlights file not found: {path}")
     df = pd.read_csv(path)
     return df
 
+
 def load_raw_sp500() -> pd.DataFrame:
-    path = DATA_RAW / "sp500_clean.csv"
+    """
+    Load the raw S&P 500 firm file with lat/long.
+    Expects SP500_RAW_FILE in data/raw/.
+    """
+    path = DATA_RAW / SP500_RAW_FILE
+    if not path.exists():
+        raise FileNotFoundError(f"SP500 firm file not found: {path}")
     df = pd.read_csv(path)
     return df
+
 
 def load_raw_returns() -> pd.DataFrame:
     """
-    Expects monthly returns with columns at least:
-    'ticker', 'date', 'ret'
+    Load monthly stock returns.
+
+    Expected minimum columns:
+    - ticker
+    - date  (YYYY-MM-DD or similar; will be parsed to datetime)
+    - ret   (monthly return, decimal, e.g. 0.02 for 2%)
     """
-    path = DATA_RAW / "sp500_monthly_returns.csv"
+    path = DATA_RAW / RETURNS_RAW_FILE
+    if not path.exists():
+        raise FileNotFoundError(f"Returns file not found: {path}")
+
     df = pd.read_csv(path)
+    if "date" not in df.columns:
+        raise ValueError("Returns file must have a 'date' column.")
     df["date"] = pd.to_datetime(df["date"])
     return df
 
+
+# ---------------------------------------------------------
+# Processed / final loaders
+# ---------------------------------------------------------
+
 def load_model_data(fallback_if_missing: bool = True) -> pd.DataFrame:
     """
-    Load final modeling dataset for the Streamlit app.
-    If missing and fallback=True, generate small synthetic sample.
+    Load the final modeling dataset (nightlights_model_data.csv)
+    produced by the pipeline.
+
+    If missing and fallback_if_missing=True, returns a small synthetic
+    dataset so the Streamlit app can still run.
     """
     path = DATA_FINAL / MODEL_DATA_FILE
     if path.exists():
@@ -37,9 +82,11 @@ def load_model_data(fallback_if_missing: bool = True) -> pd.DataFrame:
         return df
 
     if not fallback_if_missing:
-        raise FileNotFoundError(f"{path} not found.")
+        raise FileNotFoundError(f"Final model data file not found: {path}")
 
-    # Fallback synthetic data so app can at least run
+    # -----------------------------------------------------
+    # Synthetic fallback so the app doesn't crash
+    # -----------------------------------------------------
     dates = pd.date_range("2018-01-01", periods=24, freq="MS")
     tickers = ["AAA", "BBB", "CCC"]
     rows = []
@@ -63,6 +110,28 @@ def load_model_data(fallback_if_missing: bool = True) -> pd.DataFrame:
                     "ret_fwd": ret_fwd,
                 }
             )
+
     df = pd.DataFrame(rows)
+    return df
+
+
+def load_lights_monthly_by_coord() -> pd.DataFrame:
+    """
+    Load the aggregated lights grid: one row per (lat_round, lon_round, date)
+    with avg_rad_month.
+
+    This file is produced by preprocess_lights.build_lights_monthly_by_coord()
+    and saved to data/intermediate/lights_monthly_by_coord.csv.
+    """
+    path = DATA_INTER / "lights_monthly_by_coord.csv"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"lights_monthly_by_coord.csv not found at {path}. "
+            "Run the pipeline (scripts/build_all.py) first."
+        )
+
+    df = pd.read_csv(path)
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"])
     return df
 
