@@ -1,23 +1,30 @@
 # pages/1_Overview.py
+
 import streamlit as st
 import altair as alt
 import numpy as np
+import pandas as pd
+
 from src.load_data import load_model_data
 from src.utils import compute_deciles
 
 st.title("Overview: Brightness vs Future Returns")
 
-df = load_model_data(fallback_if_missing=True).copy()
+# 🔒 Force real data – no AAA/BBB/CCC fallback
+df = load_model_data(fallback_if_missing=False).copy()
 df["date"] = df["date"].astype("datetime64[ns]")
 
 required = {"ticker", "date", "brightness_change", "ret_fwd"}
 missing = required - set(df.columns)
 if missing:
-    st.error(f"Missing columns: {missing}")
+    st.error(f"Missing columns in nightlights_model_data.csv: {missing}")
     st.stop()
 
+# ---------------------------------------------------------
 # Sidebar filters
+# ---------------------------------------------------------
 st.sidebar.header("Filters (Overview)")
+
 min_date, max_date = df["date"].min(), df["date"].max()
 date_range = st.sidebar.slider(
     "Date range",
@@ -51,7 +58,9 @@ if f.empty:
     st.warning("No data for selected filters.")
     st.stop()
 
-# KPI row
+# ---------------------------------------------------------
+# KPIs
+# ---------------------------------------------------------
 c1, c2, c3, c4 = st.columns(4)
 with c1:
     st.metric("Obs", f"{len(f):,}")
@@ -65,13 +74,18 @@ with c4:
 
 st.markdown("---")
 
+# ---------------------------------------------------------
 # Time-series chart
+# ---------------------------------------------------------
 st.subheader("Time-series: average brightness change & future returns")
 
 ts = (
     f.groupby("date", as_index=False)[["brightness_change", "ret_fwd"]]
     .mean()
-    .rename(columns={"ret_fwd": "Next-month return", "brightness_change": "Brightness change"})
+    .rename(columns={
+        "ret_fwd": "Next-month return",
+        "brightness_change": "Brightness change"
+    })
 )
 
 base = alt.Chart(ts).encode(x="date:T")
@@ -79,15 +93,20 @@ base = alt.Chart(ts).encode(x="date:T")
 line_bright = base.mark_line().encode(
     y=alt.Y("Brightness change:Q", axis=alt.Axis(title="Brightness change (avg)")),
 )
+
 line_ret = base.mark_line(strokeDash=[4, 4]).encode(
     y=alt.Y("Next-month return:Q", axis=alt.Axis(title="Next-month return (avg)")),
     color=alt.value("#FF7F0E"),
 )
 
-st.altair_chart(alt.layer(line_bright, line_ret).resolve_scale(y="independent").interactive(),
-                use_container_width=True)
+st.altair_chart(
+    alt.layer(line_bright, line_ret).resolve_scale(y="independent").interactive(),
+    use_container_width=True,
+)
 
-# Scatter
+# ---------------------------------------------------------
+# Scatter plot
+# ---------------------------------------------------------
 st.subheader("Scatter: brightness change vs next-month return")
 
 scatter = (
@@ -103,7 +122,9 @@ scatter = (
 
 st.altair_chart(scatter, use_container_width=True)
 
-# Decile chart
+# ---------------------------------------------------------
+# Decile portfolios (chart)
+# ---------------------------------------------------------
 st.subheader("Decile portfolios by brightness change")
 
 dec = compute_deciles(f, "brightness_change", q=10, label_col="brightness_decile")
@@ -124,4 +145,44 @@ bar = (
 )
 
 st.altair_chart(bar, use_container_width=True)
+
+st.markdown("---")
+
+# ---------------------------------------------------------
+# TABLE 1: Summary statistics (for professor)
+# ---------------------------------------------------------
+st.subheader("Table 1: Summary statistics")
+
+summary_cols = ["brightness_change", "ret_fwd"]
+summary = f[summary_cols].agg(
+    ["count", "mean", "std", "min", "max"]
+).T.reset_index().rename(columns={"index": "Variable"})
+
+st.dataframe(summary, use_container_width=True)
+
+# ---------------------------------------------------------
+# TABLE 2: Decile portfolio table (for professor)
+# ---------------------------------------------------------
+st.subheader("Table 2: Decile portfolios based on brightness change")
+
+dec_table = (
+    dec.groupby("brightness_decile")
+    .agg(
+        n_obs=("ret_fwd", "size"),
+        avg_brightness_change=("brightness_change", "mean"),
+        avg_next_month_return=("ret_fwd", "mean"),
+    )
+    .reset_index()
+    .rename(
+        columns={
+            "brightness_decile": "Decile",
+            "n_obs": "Obs",
+            "avg_brightness_change": "Avg brightness change",
+            "avg_next_month_return": "Avg next-month return",
+        }
+    )
+)
+
+st.dataframe(dec_table, use_container_width=True)
+
 
