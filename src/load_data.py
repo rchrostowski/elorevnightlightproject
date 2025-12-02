@@ -15,10 +15,6 @@ from .config import (
     LIGHTS_URL,
 )
 
-# This runs your full pipeline if the final file is missing
-from .features import build_features_and_model_data
-
-
 # ---------------------------------------------------------
 # Raw loaders
 # ---------------------------------------------------------
@@ -123,6 +119,9 @@ def load_model_data(fallback_if_missing: bool = True) -> pd.DataFrame:
     # Case 2: file missing and we want REAL data → build pipeline now
     if not fallback_if_missing:
         print("⚠️ nightlights_model_data.csv missing — building pipeline...")
+        # 🔥 Lazy import here to avoid circular imports
+        from .features import build_features_and_model_data
+
         df = build_features_and_model_data()
         if "date" in df.columns:
             df["date"] = pd.to_datetime(df["date"])
@@ -188,6 +187,4 @@ def load_lights_monthly_by_coord() -> pd.DataFrame:
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"])
     return df
-
-
 
