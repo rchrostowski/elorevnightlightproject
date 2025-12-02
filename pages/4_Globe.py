@@ -244,6 +244,7 @@ blue_scale = [
 
 hover_col = "ret_fwd_1m" if use_return else "avg_rad_month"
 
+
 def _fmt_hover(row):
     if use_return and pd.notna(row["ret_fwd_1m"]):
         return (
@@ -256,6 +257,7 @@ def _fmt_hover(row):
             f"{row['state_name']}<br>"
             f"Brightness: {row['avg_rad_month']:.4f}"
         )
+
 
 hover_text = state_df.apply(_fmt_hover, axis=1)
 
@@ -297,25 +299,22 @@ fig.update_layout(
     margin=dict(l=0, r=0, t=0, b=0),
 )
 
-# ---------- 7. Layout: globe only ----------
-
 # ---------- 7. Layout: globe + summary panel ----------
 
-left, right = st.columns([3.2, 1])
+left, right = st.columns([3.2, 1.2])
 
 with left:
     st.plotly_chart(fig, use_container_width=True, height=650)
 
 with right:
-    # Simple text title
     st.markdown("### Month summary")
 
-    # Show selected month
+    # Selected month
     st.markdown(
         f"**Selected month:** {pd.Timestamp(selected_date).strftime('%Y-%m')}"
     )
 
-    # Average brightness
+    # Average brightness (across all states for that month)
     avg_brightness = state_df["avg_rad_month"].mean()
     st.markdown("#### Averages")
     st.metric("Avg brightness", f"{avg_brightness:.2f}")
@@ -324,6 +323,16 @@ with right:
     if use_return and state_df["ret_fwd_1m"].notna().any():
         avg_ret = state_df["ret_fwd_1m"].mean()
         st.metric("Avg next-month return", f"{avg_ret:.2%}")
+
+    # Model-based metrics for this month (ΔLight and predicted return)
+    if not model.empty and {"brightness_change", "ret_fwd_1m", "date"}.issubset(model.columns):
+        model_month = model[model["date"] == selected_date].copy()
+        if not model_month.empty:
+            st.markdown("#### Model metrics")
+            delta_light = model_month["brightness_change"].mean()
+            pred_ret = model_month["ret_fwd_1m"].mean()
+            st.metric("Avg ΔLight", f"{delta_light:.2f}")
+            st.metric("Avg predicted return", f"{pred_ret:.2%}")
 
     # Top 5 brightest states
     st.markdown("#### Brightest states")
@@ -346,45 +355,6 @@ st.caption(
     "Drag to rotate and explore different regions."
 )
 
-
-
-
-    # Metrics card (ΔLight + predicted return)
-    st.markdown("<div class='anomaly-card'>", unsafe_allow_html=True)
-    st.markdown("<div class='panel-title'>Metrics</div>", unsafe_allow_html=True)
-
-    delta_light_display = "—"
-    pred_ret_display = "—"
-
-    if not model.empty and {"brightness_change", "ret_fwd_1m", "date"}.issubset(model.columns):
-        model_month = model[model["date"] == selected_date].copy()
-        if not model_month.empty:
-            delta_light = model_month["brightness_change"].mean()
-            pred_ret = model_month["ret_fwd_1m"].mean()
-            delta_light_display = f"{delta_light:.2f}"
-            pred_ret_display = f"{pred_ret:.2f}"
-
-    st.markdown(
-        f"<div class='metric-label'>ΔLight</div>"
-        f"<div class='metric-value'>{delta_light_display}</div>",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    st.markdown(
-        f"<div class='metric-label'>Predicted Return</div>"
-        f"<div class='metric-value'>{pred_ret_display}</div>",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-st.caption(
-    f"Globe shows state-level hotspots for "
-    f"{pd.Timestamp(selected_date).strftime('%Y-%m')}. "
-    "Drag to rotate and explore different regions."
-)
 
 
 
