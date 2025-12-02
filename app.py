@@ -20,7 +20,8 @@ st.caption("FIN 377 • VIIRS night-time lights and S&P 500 performance")
 # ---------------------------------------------------------
 # Load data
 # ---------------------------------------------------------
-df = load_model_data(fallback_if_missing=True)
+df = load_model_data(fallback_if_missing=False)
+
 
 required_cols = {"ticker", "date", "brightness_change", "ret_fwd"}
 missing = required_cols - set(df.columns)
