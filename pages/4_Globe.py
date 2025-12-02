@@ -299,7 +299,46 @@ fig.update_layout(
 
 # ---------- 7. Layout: globe only ----------
 
-st.plotly_chart(fig, use_container_width=True, height=650)
+# ---------- 7. Layout: globe + summary panel ----------
+
+left, right = st.columns([3.2, 1])
+
+with left:
+    st.plotly_chart(fig, use_container_width=True, height=650)
+
+with right:
+    # Simple text title
+    st.markdown("### Month summary")
+
+    # Show selected month
+    st.markdown(
+        f"**Selected month:** {pd.Timestamp(selected_date).strftime('%Y-%m')}"
+    )
+
+    # Average brightness
+    avg_brightness = state_df["avg_rad_month"].mean()
+    st.markdown("#### Averages")
+    st.metric("Avg brightness", f"{avg_brightness:.2f}")
+
+    # Average next-month return if available
+    if use_return and state_df["ret_fwd_1m"].notna().any():
+        avg_ret = state_df["ret_fwd_1m"].mean()
+        st.metric("Avg next-month return", f"{avg_ret:.2%}")
+
+    # Top 5 brightest states
+    st.markdown("#### Brightest states")
+    top_states = (
+        state_df.sort_values("avg_rad_month", ascending=False)
+                .head(5)[["state", "state_name", "avg_rad_month"]]
+                .rename(
+                    columns={
+                        "state": "Code",
+                        "state_name": "State",
+                        "avg_rad_month": "Brightness",
+                    }
+                )
+    )
+    st.table(top_states)
 
 st.caption(
     f"Globe shows state-level hotspots for "
