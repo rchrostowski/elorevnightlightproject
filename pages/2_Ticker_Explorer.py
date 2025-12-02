@@ -5,7 +5,7 @@ from src.load_data import load_model_data
 
 st.title("Ticker Explorer")
 
-df = load_model_data(fallback_if_missing=True).copy()
+df = load_model_data(fallback_if_missing=False).copy()
 df["date"] = df["date"].astype("datetime64[ns]")
 
 required = {"ticker", "date", "brightness_change", "ret_fwd", "avg_rad_month"}
