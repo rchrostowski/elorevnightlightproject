@@ -1,143 +1,134 @@
-# pages/2_Ticker_Explorer.py
-
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 
 from src.load_data import load_model_data
 
-st.markdown("## 🔍 Ticker Explorer (HQ County)")
+st.markdown("## 2. Ticker Explorer – HQ lights vs that ticker’s returns")
 
 df = load_model_data(fallback_if_missing=True)
 if df.empty:
-    st.error("Final dataset is missing. Run `python scripts/build_all.py` first.")
+    st.error("Final dataset `nightlights_model_data.csv` is missing or empty.")
     st.stop()
 
-required = {"ticker", "date"}
-if not required.issubset(df.columns):
-    st.error(f"`nightlights_model_data` must contain at least: {required}")
-    st.stop()
-
-# Basic cleaning
+df = df.copy()
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 df = df.dropna(subset=["date"])
 
-# --- Figure out column names for HQ county/state ---
+needed = {"ticker", "firm", "county_name", "state", "brightness_change", "ret_fwd_1m"}
+missing = needed - set(df.columns)
+if missing:
+    st.error(f"`nightlights_model_data` must contain: {needed}. Missing: {missing}")
+    st.stop()
 
-county_col = None
-for c in ["county_name", "county", "county_label"]:
-    if c in df.columns:
-        county_col = c
-        break
+# Clean county junk
+df["county_name"] = df["county_name"].astype(str)
+df = df[df["county_name"].str.lower() != "n/a"]
 
-state_col = None
-for c in ["state", "state_abbr", "state_code", "state_name"]:
-    if c in df.columns:
-        state_col = c
-        break
+df["brightness_change"] = pd.to_numeric(df["brightness_change"], errors="coerce")
+df["ret_fwd_1m"] = pd.to_numeric(df["ret_fwd_1m"], errors="coerce")
+df = df.dropna(subset=["brightness_change", "ret_fwd_1m"])
 
-# Ticker selection
 tickers = sorted(df["ticker"].unique())
 default_ticker = "AAPL" if "AAPL" in tickers else tickers[0]
 
-st.sidebar.header("Ticker filters")
-ticker_sel = st.sidebar.selectbox("Ticker", options=tickers, index=tickers.index(default_ticker))
+ticker = st.selectbox("Select ticker:", options=tickers, index=tickers.index(default_ticker))
+df_t = df[df["ticker"] == ticker].sort_values("date").copy()
 
-# Date window
-date_min = df["date"].min()
-date_max = df["date"].max()
-start, end = st.sidebar.slider(
-    "Date window",
-    min_value=date_min.to_pydatetime(),
-    max_value=date_max.to_pydatetime(),
-    value=(date_min.to_pydatetime(), date_max.to_pydatetime()),
-    format="YYYY-MM",
+firm_name = df_t["firm"].iloc[0] if not df_t["firm"].isna().all() else ticker
+county_name = df_t["county_name"].iloc[0]
+state = df_t["state"].iloc[0]
+
+st.markdown(
+    f"""
+**Firm:** `{ticker}` – {firm_name}  
+**HQ county:** {county_name}, {state}  
+
+- **Y-axis** in the main chart is **next-month total return** (`ret_fwd_1m`).  
+- We explicitly use **total returns (not market-excess)**, and we say that out loud here.
+"""
 )
 
-df_t = df[(df["ticker"] == ticker_sel) & (df["date"].between(start, end))].copy()
+st.markdown("---")
 
-if df_t.empty:
-    st.warning("No observations for that ticker / date window.")
-    st.stop()
+# --- 1. Time series: returns with brightness shading ---
 
-# --- Header metrics ---
+st.markdown("### A. Time series: next-month returns vs HQ brightness change")
 
-firm_name = df_t["firm"].iloc[0] if "firm" in df_t.columns else ticker_sel
-
-county_val = df_t[county_col].iloc[0] if county_col else "n/a"
-state_val = df_t[state_col].iloc[0] if state_col and state_col in df_t.columns else None
-
-# Avoid displaying ", n/a"
-if state_val is None or pd.isna(state_val) or str(state_val).lower() in ["nan", "none", "n/a", ""]:
-    hq_label = str(county_val)
+if len(df_t) < 3:
+    st.warning("Not enough data points for this ticker to make a meaningful chart.")
 else:
-    hq_label = f"{county_val}, {state_val}"
+    # Normalize brightness change for color
+    b = df_t["brightness_change"]
+    if b.nunique() > 1:
+        b_norm = (b - b.min()) / (b.max() - b.min())
+    else:
+        b_norm = pd.Series(0.5, index=b.index)
 
-n_obs = len(df_t)
+    df_t["brightness_norm"] = b_norm
 
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("Ticker", ticker_sel)
-with col2:
-    st.metric("Firm", firm_name)
-with col3:
-    st.metric("HQ county", hq_label)
+    fig_ts = px.bar(
+        df_t,
+        x="date",
+        y="ret_fwd_1m",
+        color="brightness_norm",
+        color_continuous_scale="Blues",
+        labels={
+            "date": "Month",
+            "ret_fwd_1m": "Next-month total return",
+            "brightness_norm": "Δ brightness (normalized)",
+        },
+        title=f"{ticker}: Next-month returns, colored by HQ ΔBrightness",
+    )
+    fig_ts.update_layout(margin=dict(l=0, r=0, t=40, b=0))
+    st.plotly_chart(fig_ts, use_container_width=True)
 
-# --- Returns vs brightness over time ---
+    st.markdown(
+        """
+**How to read this:**  
 
-st.markdown("### Time Series: county brightness vs next-month returns")
+- Each bar is a **month** (x-axis) and the **next-month total return** for this ticker (y-axis).  
+- The **color** encodes the **change in HQ county brightness**:
+  - darker bars → smaller brightness change;  
+  - lighter bars → large positive changes in night-time lights.  
 
-plot_cols = []
-labels = {}
-
-if "brightness_change" in df_t.columns:
-    plot_cols.append("brightness_change")
-    labels["brightness_change"] = "ΔBrightness (HQ county)"
-
-if "ret_fwd_1m" in df_t.columns:
-    plot_cols.append("ret_fwd_1m")
-    labels["ret_fwd_1m"] = "Next-month return"
-
-if not plot_cols:
-    st.warning("No `brightness_change` or `ret_fwd_1m` column in the dataset.")
-else:
-    ts = df_t[["date"] + plot_cols].set_index("date").rename(columns=labels)
-    st.line_chart(ts)
-
-    st.caption(
-        "**ret_fwd_1m** is the ticker’s **next-month total return** (not excess over the risk-free rate). "
-        "`ΔBrightness` is the month-to-month change in VIIRS night-lights for the HQ county."
+The regression in the **Regression** tab essentially asks:  
+> *Across all firms and months, do the light-colored bars (brightening HQs) tend to have systematically higher next-month returns?*
+"""
     )
 
-# --- Scatter: returns vs brightness (per ticker) ---
+st.markdown("---")
 
-if {"brightness_change", "ret_fwd_1m"}.issubset(df_t.columns):
-    st.markdown("### Scatter: ΔBrightness vs next-month return")
+# --- 2. Scatter: ΔBrightness vs next-month return for this ticker ---
 
-    scat = df_t[["brightness_change", "ret_fwd_1m"]].dropna()
-    if scat.empty:
-        st.info("No non-missing pairs of (brightness_change, ret_fwd_1m) for this ticker.")
-    else:
-        corr = scat["brightness_change"].corr(scat["ret_fwd_1m"])
-        st.write(f"Correlation for **{ticker_sel}** in this window: **{corr:.3f}**")
+st.markdown("### B. Within-ticker scatter: ΔBrightness vs next-month return")
 
-        st.scatter_chart(scat, x="brightness_change", y="ret_fwd_1m")
-        st.caption(
-            "Each point is a month for this ticker. "
-            "X-axis: change in HQ county night-lights; "
-            "Y-axis: **next-month stock return**."
-        )
+if len(df_t) >= 5:
+    fig_sc = px.scatter(
+        df_t,
+        x="brightness_change",
+        y="ret_fwd_1m",
+        trendline="ols",
+        labels={
+            "brightness_change": "Δ brightness (HQ county)",
+            "ret_fwd_1m": "Next-month total return",
+        },
+        title=f"{ticker}: ΔBrightness vs next-month total return (raw within-ticker)",
+    )
+    fig_sc.update_layout(margin=dict(l=0, r=0, t=40, b=0))
+    st.plotly_chart(fig_sc, use_container_width=True)
 
-# --- Raw observations table ---
+    st.markdown(
+        """
+**How this ties into the regression:**  
 
-st.markdown("### Underlying observations")
-
-show_cols = [c for c in [
-    "ticker", "firm", county_col, state_col,
-    "date", "avg_rad_month", "brightness_change",
-    "ret", "ret_fwd_1m"
-] if c and c in df_t.columns]
-
-st.dataframe(
-    df_t.sort_values("date")[show_cols],
-    use_container_width=True,
-)
+- This is a **within-ticker** view of the same relationship:  
+  - x-axis: change in HQ county brightness this month,  
+  - y-axis: next-month total return.  
+- The **regression tab** pools these relationships across **all tickers** and adds **year–month fixed effects** `C(year-month)`, which:
+  - compares bright vs dark HQ counties *within the same calendar month*,  
+  - removes common seasonal and macro effects.
+"""
+    )
+else:
+    st.info("Too few observations for this ticker to show a meaningful scatter.")
