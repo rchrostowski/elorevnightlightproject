@@ -2,85 +2,105 @@
 
 import streamlit as st
 import pandas as pd
-import altair as alt
 
 from src.load_data import load_model_data
 
-st.title("Ticker Explorer")
+st.markdown("## 🔍 Ticker Explorer")
 
-df = load_model_data(fallback_if_missing=True).copy()
+df = load_model_data(fallback_if_missing=True)
 if df.empty:
-    st.error("nightlights_model_data.csv is missing or empty.")
+    st.error("Final dataset is missing. Run `python scripts/build_all.py` first.")
+    st.stop()
+
+if "date" not in df.columns or "ticker" not in df.columns:
+    st.error("`nightlights_model_data` must contain at least `ticker` and `date`.")
     st.stop()
 
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 df = df.dropna(subset=["date"])
 
-# Only keep rows where we have at least brightness_change or returns
-mask = df[["brightness_change", "ret", "ret_fwd"]].notna().any(axis=1)
-df = df[mask].sort_values("date")
-
+# Sidebar controls
 tickers = sorted(df["ticker"].unique())
-default_index = tickers.index("AAPL") if "AAPL" in tickers else 0
+default_ticker = "AAPL" if "AAPL" in tickers else tickers[0]
 
-st.sidebar.header("Ticker selection")
-ticker = st.sidebar.selectbox("Ticker", options=tickers, index=default_index)
+st.sidebar.header("Ticker filters")
+ticker_sel = st.sidebar.selectbox("Ticker", options=tickers, index=tickers.index(default_ticker))
 
-df_t = df[df["ticker"] == ticker].copy()
+# Optional date range
+date_min = df["date"].min()
+date_max = df["date"].max()
+start, end = st.sidebar.slider(
+    "Date window",
+    min_value=date_min.to_pydatetime(),
+    max_value=date_max.to_pydatetime(),
+    value=(date_min.to_pydatetime(), date_max.to_pydatetime()),
+    format="YYYY-MM",
+)
+
+df_t = df[(df["ticker"] == ticker_sel) & (df["date"].between(start, end))].copy()
+
 if df_t.empty:
-    st.warning("No data for this ticker.")
+    st.warning("No observations for that ticker / date window.")
     st.stop()
 
-firm_name = df_t["firm"].iloc[0]
-state = df_t["state_full"].iloc[0]
-county = df_t["county_name"].iloc[0]
+firm_name = df_t["firm"].iloc[0] if "firm" in df_t.columns else ticker_sel
+county = df_t["county_name"].iloc[0] if "county_name" in df_t.columns else "n/a"
+state = df_t["state"].iloc[0] if "state" in df_t.columns else "n/a"
 
-c1, c2, c3 = st.columns(3)
-c1.metric("Ticker", ticker)
-c2.metric("Firm", firm_name)
-c3.metric("HQ county", f"{county}, {state}")
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("Firm", firm_name)
+with col2:
+    st.metric("HQ county", f"{county}, {state}")
+with col3:
+    st.metric("# months in window", len(df_t))
 
-st.markdown("### Time series: HQ ΔBrightness vs next-month returns")
+# Time series of brightness and returns
+st.markdown("### Time series: brightness vs. returns")
 
-df_t["ret_fwd_pct"] = df_t["ret_fwd"] * 100
+plot_cols = []
+if "brightness_change" in df_t.columns:
+    plot_cols.append("brightness_change")
+if "ret_fwd_1m" in df_t.columns:
+    plot_cols.append("ret_fwd_1m")
 
-base = alt.Chart(df_t).encode(x="date:T")
+if not plot_cols:
+    st.warning("Missing `brightness_change` / `ret_fwd_1m` columns in the dataset.")
+else:
+    ts = df_t[["date"] + plot_cols].set_index("date")
+    st.line_chart(ts)
 
-line_dlight = base.mark_line(color="#f58518").encode(
-    y=alt.Y("brightness_change:Q", title="ΔBrightness (HQ county)"),
-)
+    st.caption(
+        "- **brightness_change**: change in county night-lights vs previous month\n"
+        "- **ret_fwd_1m**: next-month stock return for this ticker"
+    )
 
-line_ret = base.mark_line(color="#4c78a8").encode(
-    y=alt.Y("ret_fwd_pct:Q", title="Next-month return (%)"),
-)
+# Scatter: ΔBrightness vs next-month return
+if {"brightness_change", "ret_fwd_1m"}.issubset(df_t.columns):
+    st.markdown("### Scatter: ΔBrightness vs. next-month return")
 
-st.altair_chart(
-    alt.layer(line_dlight, line_ret).resolve_scale(y="independent"),
+    scat = df_t[["brightness_change", "ret_fwd_1m"]].dropna()
+    if scat.empty:
+        st.info("No non-missing pairs of (brightness_change, ret_fwd_1m) for this ticker.")
+    else:
+        corr = scat["brightness_change"].corr(scat["ret_fwd_1m"])
+        st.write(f"Correlation in this window: **{corr:.3f}**")
+
+        st.scatter_chart(scat, x="brightness_change", y="ret_fwd_1m")
+        st.caption(
+            "Each point is a month for this ticker. X-axis: change in night-lights at HQ county; "
+            "Y-axis: next-month stock return."
+        )
+
+# Raw table
+st.markdown("### Underlying observations")
+show_cols = [c for c in [
+    "ticker", "firm", "county_name", "state",
+    "date", "avg_rad_month", "brightness_change",
+    "ret", "ret_fwd_1m"
+] if c in df_t.columns]
+
+st.dataframe(
+    df_t.sort_values("date")[show_cols],
     use_container_width=True,
 )
-
-st.markdown("### Cross-section for this ticker: ΔBrightness vs next-month return")
-
-corr_t = df_t["brightness_change"].corr(df_t["ret_fwd"])
-st.write(f"Correlation (ΔBrightness, next-month return) for **{ticker}**: "
-         f"**{corr_t:.3f}**" if pd.notna(corr_t) else "Correlation not available.")
-
-scatter = (
-    alt.Chart(df_t)
-    .mark_circle(size=80, opacity=0.6)
-    .encode(
-        x=alt.X("brightness_change:Q", title="ΔBrightness (HQ county)"),
-        y=alt.Y("ret_fwd:Q", title="Next-month return"),
-        color=alt.Color("date:T", legend=None),
-        tooltip=["date", "brightness_change", "ret_fwd"],
-    )
-    .interactive()
-)
-
-st.altair_chart(scatter, use_container_width=True)
-
-st.caption(
-    "This page focuses on a single firm. We look at how changes in nightlights "
-    "around its HQ county line up with the firm's subsequent monthly returns."
-)
-

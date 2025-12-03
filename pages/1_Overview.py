@@ -95,5 +95,3 @@ st.caption(
     "This overview page shows how changes in nighttime lights around firm HQs "
     "line up with *next-month* stock returns, aggregated across the whole sample."
 )
-
-

@@ -2,98 +2,128 @@
 
 import streamlit as st
 import pandas as pd
-import altair as alt
 
 from src.load_data import load_model_data
 
-st.title("County Explorer")
+st.markdown("## 🏙 County Explorer")
 
-df = load_model_data(fallback_if_missing=True).copy()
+df = load_model_data(fallback_if_missing=True)
 if df.empty:
-    st.error("nightlights_model_data.csv is missing or empty.")
+    st.error("Final dataset is missing. Run `python scripts/build_all.py` first.")
+    st.stop()
+
+required = {"county_name", "state", "date"}
+if not required.issubset(df.columns):
+    st.error(f"`nightlights_model_data` must contain columns: {required}")
     st.stop()
 
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 df = df.dropna(subset=["date"])
 
-mask = df[["brightness_change", "ret_fwd"]].notna().any(axis=1)
-df = df[mask].sort_values("date")
+df["county_label"] = df["county_name"].astype(str) + ", " + df["state"].astype(str)
 
-# Sidebar selection
-st.sidebar.header("County selection")
+# Sidebar: pick county
+st.sidebar.header("County filters")
 
-state_list = sorted(df["state_full"].dropna().unique())
-state = st.sidebar.selectbox("State", options=state_list)
+county_options = sorted(df["county_label"].unique())
+default_label = "Santa Clara County, CA" if any(
+    "Santa Clara" in c and "CA" in c for c in county_options
+) else county_options[0]
 
-df_state = df[df["state_full"] == state]
-county_list = sorted(df_state["county_name"].dropna().unique())
-county = st.sidebar.selectbox("County", options=county_list)
+county_sel = st.sidebar.selectbox(
+    "HQ county",
+    options=county_options,
+    index=county_options.index(default_label) if default_label in county_options else 0,
+)
 
-df_c = df_state[df_state["county_name"] == county].copy()
+df_c = df[df["county_label"] == county_sel].copy()
 if df_c.empty:
-    st.warning("No data for this county.")
+    st.warning("No observations for that county.")
     st.stop()
 
-st.subheader(f"{county}, {state}")
+date_min = df_c["date"].min()
+date_max = df_c["date"].max()
+start, end = st.sidebar.slider(
+    "Date window",
+    min_value=date_min.to_pydatetime(),
+    max_value=date_max.to_pydatetime(),
+    value=(date_min.to_pydatetime(), date_max.to_pydatetime()),
+    format="YYYY-MM",
+)
+
+df_c = df_c[df_c["date"].between(start, end)].copy()
+if df_c.empty:
+    st.warning("No observations in that date window for this county.")
+    st.stop()
+
+# Summary metrics
+n_tickers = df_c["ticker"].nunique() if "ticker" in df_c.columns else 0
+avg_bright = df_c["avg_rad_month"].mean() if "avg_rad_month" in df_c.columns else float("nan")
+avg_dlight = df_c["brightness_change"].mean() if "brightness_change" in df_c.columns else float("nan")
+avg_ret = df_c["ret_fwd_1m"].mean() if "ret_fwd_1m" in df_c.columns else float("nan")
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("Tickers HQ'd here", n_tickers)
+with col2:
+    if pd.notna(avg_dlight):
+        st.metric("Avg Δbrightness", f"{avg_dlight:.2f}")
+    else:
+        st.metric("Avg Δbrightness", "n/a")
+with col3:
+    if pd.notna(avg_ret):
+        st.metric("Avg next-month return", f"{avg_ret:.2%}")
+    else:
+        st.metric("Avg next-month return", "n/a")
 
 # Firms in this county
-firms = df_c[["ticker", "firm"]].drop_duplicates().sort_values("ticker")
-st.markdown("**Firms headquartered in this county:**")
-st.table(firms)
+st.markdown("### Firms headquartered in this county")
 
-# Aggregate over firms in the county
-agg = (
-    df_c.groupby("date")
-    .agg(
-        avg_brightness=("avg_rad_month", "mean"),
-        avg_dlight=("brightness_change", "mean"),
-        avg_ret_fwd=("ret_fwd", "mean"),
-        n_firms=("ticker", "nunique"),
+if {"ticker", "firm"}.issubset(df_c.columns):
+    firms_table = (
+        df_c[["ticker", "firm"]]
+        .drop_duplicates()
+        .sort_values("ticker")
+        .reset_index(drop=True)
     )
-    .reset_index()
-)
+    st.table(firms_table)
+else:
+    st.info("Ticker / firm information not available in this dataset.")
 
-agg["avg_ret_fwd_pct"] = agg["avg_ret_fwd"] * 100
+# Time series for the county
+st.markdown("### County brightness and returns over time")
 
-c1, c2 = st.columns(2)
-c1.metric("Average number of firms per month", f"{agg['n_firms'].mean():.1f}")
-c2.metric("Obs (month-county)", f"{len(agg)}")
+plot_cols = []
+labels = {}
+if "avg_rad_month" in df_c.columns:
+    plot_cols.append("avg_rad_month")
+    labels["avg_rad_month"] = "avg_rad_month (level)"
+if "brightness_change" in df_c.columns:
+    plot_cols.append("brightness_change")
+    labels["brightness_change"] = "brightness_change (Δ vs prev. month)"
+if "ret_fwd_1m" in df_c.columns:
+    plot_cols.append("ret_fwd_1m")
+    labels["ret_fwd_1m"] = "ret_fwd_1m (next-month return)"
 
-st.markdown("### County average: ΔBrightness and next-month returns")
+if plot_cols:
+    ts = df_c[["date"] + plot_cols].set_index("date")
+    st.line_chart(ts.rename(columns=labels))
+    st.caption(
+        "Lines show how night-lights and next-month returns evolve for HQ firms in this county."
+    )
+else:
+    st.info("No brightness / return columns available to plot.")
 
-base = alt.Chart(agg).encode(x="date:T")
+# Raw table
+st.markdown("### Underlying observations in this county")
 
-line_dlight = base.mark_line(color="#f58518").encode(
-    y=alt.Y("avg_dlight:Q", title="Average ΔBrightness"),
-)
+show_cols = [c for c in [
+    "ticker", "firm", "county_name", "state",
+    "date", "avg_rad_month", "brightness_change",
+    "ret", "ret_fwd_1m"
+] if c in df_c.columns]
 
-line_ret = base.mark_line(color="#4c78a8").encode(
-    y=alt.Y("avg_ret_fwd_pct:Q", title="Avg next-month return (%)"),
-)
-
-st.altair_chart(
-    alt.layer(line_dlight, line_ret).resolve_scale(y="independent"),
+st.dataframe(
+    df_c.sort_values(["date", "ticker"])[show_cols],
     use_container_width=True,
 )
-
-st.markdown("### Firm-level scatter in this county")
-
-scatter = (
-    alt.Chart(df_c)
-    .mark_circle(opacity=0.4)
-    .encode(
-        x=alt.X("brightness_change:Q", title="ΔBrightness (firm's HQ county)"),
-        y=alt.Y("ret_fwd:Q", title="Next-month return"),
-        color=alt.Color("ticker:N", legend=None),
-        tooltip=["ticker", "firm", "date", "brightness_change", "ret_fwd"],
-    )
-    .interactive()
-)
-
-st.altair_chart(scatter, use_container_width=True)
-
-st.caption(
-    "This page zooms into a single HQ county and shows both the average "
-    "relationship and the firm-by-firm scatter of ΔBrightness vs next-month returns."
-)
-

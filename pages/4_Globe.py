@@ -150,6 +150,3 @@ st.caption(
     f"The globe shows firm HQ locations for {selected_month:%Y-%m}. "
     f"Marker size and brightness reflect {metric_label.lower()}."
 )
-
-
-

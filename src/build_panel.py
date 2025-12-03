@@ -1,156 +1,216 @@
 # src/build_panel.py
 
-import numpy as np
 import pandas as pd
+from pathlib import Path
 
-from .load_data import (
-    load_sp500_clean,
-    load_lights_monthly_by_coord,
-)
+ROOT = Path("data")
 
 
-def _assign_nearest_county(sp500: pd.DataFrame, counties: pd.DataFrame) -> pd.DataFrame:
+def _load_hq_mapping():
     """
-    For each firm HQ (lat, lon) in sp500, assign the nearest county
-    based on county centroids (lat_round, lon_round).
+    Load firm HQ → county mapping.
 
-    Adds:
-        - county_id_2 : the county id_2 used in lights
-        - county_name : human-readable county name (name_2)
+    Prefers:
+        data/intermediate/hq_with_county.csv   (professor's correct mapping)
+
+    Falls back to:
+        data/intermediate/firm_hq_county.csv   (our derived mapping, if needed)
     """
-    # Drop any weird firms without coordinates
-    sp = sp500.dropna(subset=["lat", "lon"]).copy()
+    path_hq1 = ROOT / "intermediate" / "hq_with_county.csv"
+    path_hq2 = ROOT / "intermediate" / "firm_hq_county.csv"
 
-    if sp.empty or counties.empty:
-        raise ValueError(
-            "No valid firms or county centroids to match. "
-            "Check that sp500_clean has lat/lon and lights_monthly_by_coord has lat_round/lon_round."
+    if path_hq1.exists():
+        hq = pd.read_csv(path_hq1)
+        print(f"📁 Using HQ mapping from {path_hq1}")
+        cols = list(hq.columns)
+        # From your sample:
+        # ticker, firm, state_abbrev, lat, lon, state_full, state_abbrev2, county_name, county_fips
+        if len(cols) >= 9:
+            hq = hq.rename(
+                columns={
+                    cols[0]: "ticker",
+                    cols[1]: "firm",
+                    cols[5]: "state_full",   # e.g., "California"
+                    cols[7]: "county_name",  # e.g., "Santa Clara County"
+                    cols[8]: "county_fips",
+                    cols[3]: "lat",
+                    cols[4]: "lon",
+                }
+            )
+        else:
+            raise ValueError(
+                f"hq_with_county.csv format unexpected. Columns: {cols}"
+            )
+    elif path_hq2.exists():
+        hq = pd.read_csv(path_hq2)
+        print(f"📁 Using HQ mapping from {path_hq2}")
+        hq.columns = [c.strip().lower() for c in hq.columns]
+        # Expect: ticker, firm, county_fips, county_name, state, lat, lon
+        missing = {"ticker", "firm", "county_name", "state"} - set(hq.columns)
+        if missing:
+            raise ValueError(
+                f"firm_hq_county.csv missing {missing}. Columns: {list(hq.columns)}"
+            )
+        # Rename into a compatible schema
+        hq = hq.rename(columns={"state": "state_full"})
+    else:
+        raise FileNotFoundError(
+            "Could not find HQ mapping. Expect either:\n"
+            "  data/intermediate/hq_with_county.csv OR\n"
+            "  data/intermediate/firm_hq_county.csv"
         )
 
-    county_coords = counties[["lat_round", "lon_round"]].to_numpy()
-    firm_coords = sp[["lat", "lon"]].to_numpy()
+    # Clean keys for merging: lowercase, strip, remove ' county'
+    hq["ticker"] = hq["ticker"].astype(str)
 
-    nearest_ids = []
-    nearest_names = []
+    hq["state_key"] = (
+        hq["state_full"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+    hq["county_key"] = (
+        hq["county_name"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .str.replace(" county", "", regex=False)
+    )
 
-    for (flat, flon) in firm_coords:
-        # squared Euclidean distance in lat/lon space (good enough for this use case)
-        d2 = (county_coords[:, 0] - flat) ** 2 + (county_coords[:, 1] - flon) ** 2
-        idx = int(np.argmin(d2))
-        nearest_ids.append(counties.iloc[idx]["id_2"])
-        nearest_names.append(counties.iloc[idx]["name_2"])
+    return hq[
+        [
+            "ticker",
+            "firm",
+            "state_full",
+            "county_name",
+            "county_fips",
+            "lat",
+            "lon",
+            "state_key",
+            "county_key",
+        ]
+    ]
 
-    sp["county_id_2"] = nearest_ids
-    sp["county_name"] = nearest_names
 
-    # Put county info back into the full sp500 (in case there were NaNs)
-    result = sp500.copy()
-    result = result.merge(
-        sp[["ticker", "county_id_2", "county_name"]],
-        on="ticker",
+def build_panel_firms_with_brightness():
+    hq = _load_hq_mapping()
+
+    lights_path = ROOT / "intermediate" / "lights_monthly_by_coord.csv"
+    rets_path = ROOT / "raw" / "sp500_monthly_returns.csv"
+
+    lights = pd.read_csv(lights_path)
+    rets = pd.read_csv(rets_path)
+
+    # ---------------- Lights: normalize + build merge keys ----------------
+    lights.columns = [c.strip().lower() for c in lights.columns]
+
+    # Expect: name_1 (state), name_2 (county), date, avg_rad_month
+    if "date" not in lights.columns:
+        raise ValueError(f"{lights_path} must contain a 'date' column.")
+    if "avg_rad_month" not in lights.columns:
+        raise ValueError(f"{lights_path} must contain 'avg_rad_month'.")
+    if "name_1" not in lights.columns or "name_2" not in lights.columns:
+        raise ValueError(
+            f"{lights_path} must contain 'name_1' (state) and 'name_2' (county). "
+            f"Found: {list(lights.columns)}"
+        )
+
+    lights["date"] = pd.to_datetime(lights["date"], errors="coerce")
+    lights = lights.dropna(subset=["date"])
+
+    lights["state_key"] = (
+        lights["name_1"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+    lights["county_key"] = (
+        lights["name_2"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .str.replace(" county", "", regex=False)
+    )
+
+    # ---------------- Returns: normalize ----------------
+    rets.columns = [c.strip().lower() for c in rets.columns]
+
+    if "date" not in rets.columns:
+        raise ValueError(f"{rets_path} must contain a 'date' column.")
+    if "ticker" not in rets.columns:
+        raise ValueError(f"{rets_path} must contain a 'ticker' column.")
+
+    if "ret" not in rets.columns:
+        if "return" in rets.columns:
+            rets = rets.rename(columns={"return": "ret"})
+        else:
+            raise ValueError(
+                f"{rets_path} must contain either 'ret' or 'return'. "
+                f"Found: {list(rets.columns)}"
+            )
+
+    rets["date"] = pd.to_datetime(rets["date"], errors="coerce")
+    rets = rets.dropna(subset=["date"])
+    rets["ticker"] = rets["ticker"].astype(str)
+
+    # ---------------- Merge HQ with lights by state+county ----------------
+    print("🔗 Merging HQ mapping with lights on (state_key, county_key)...")
+    panel = hq.merge(
+        lights[["state_key", "county_key", "date", "avg_rad_month"]],
+        on=["state_key", "county_key"],
         how="left",
     )
 
-    return result
+    # At this point we have one row per (ticker, county, date)
+    # but some firms may not match if naming is off.
+    merged_count = panel["avg_rad_month"].notna().sum()
+    print(f"  → Non-missing brightness rows: {merged_count} / {len(panel)}")
 
+    # ---------------- Merge in returns on (ticker, date) ----------------
+    panel = panel.merge(
+        rets[["ticker", "date", "ret"]],
+        on=["ticker", "date"],
+        how="left",
+    )
 
-def build_panel_firms_with_brightness() -> pd.DataFrame:
-    """
-    Build a firm × month panel with localized brightness.
+    # ---------------- Sort + compute forward returns & brightness change ----------------
+    panel = panel.sort_values(["ticker", "date"])
 
-    Steps:
-        1. Load sp500_clean (tickers + HQ lat/lon)
-        2. Load county-level nightlights (2018+)
-        3. Assign each firm to nearest county by distance
-        4. Merge to get brightness per firm-month
+    # Next-month return per ticker
+    panel["ret_fwd"] = panel.groupby("ticker")["ret"].shift(-1)
 
-    Returns a DataFrame with at least:
-        ['ticker', 'company', 'date',
-         'county_id_2', 'county_name',
-         'avg_rad_month', 'brightness',
-         'lat_round', 'lon_round', ...]
-    """
-    print("🚧 Building firm × month brightness panel (county-level)...")
+    # Change in brightness at the county level over time
+    # (using county_key as the panel dimension)
+    panel["brightness_change"] = panel.groupby(
+        ["state_key", "county_key"]
+    )["avg_rad_month"].diff()
 
-    # 1) Firms
-    sp500 = load_sp500_clean().copy()
-    if not {"ticker", "lat", "lon"}.issubset(sp500.columns):
-        raise ValueError(
-            "sp500_clean must have columns ['ticker','lat','lon']. "
-            f"Found: {list(sp500.columns)}"
-        )
+    # ---------------- Save final panel ----------------
+    out_path = ROOT / "final" / "nightlights_model_data.csv"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    panel.to_csv(out_path, index=False)
 
-    print(f"🏢 Loaded {len(sp500)} firms from sp500_clean.csv")
-
-    # 2) County-level lights
-    lights = load_lights_monthly_by_coord().copy()
-    expected_l_cols = {"id_2", "name_2", "date", "avg_rad_month", "lat_round", "lon_round"}
-    if not expected_l_cols.issubset(lights.columns):
-        raise ValueError(
-            "lights_monthly_by_coord.csv must have columns "
-            f"{expected_l_cols}. Found: {list(lights.columns)}"
-        )
-
-    lights["date"] = pd.to_datetime(lights["date"])
+    print(f"✅ Saved final dataset to {out_path}")
+    print("Preview:")
     print(
-        "💡 lights_monthly_by_coord time window:",
-        lights["date"].min(),
-        "→",
-        lights["date"].max(),
-    )
-
-    # Unique county centroids from lights
-    counties = (
-        lights[["id_2", "name_2", "lat_round", "lon_round"]]
-        .dropna(subset=["lat_round", "lon_round"])
-        .drop_duplicates("id_2")
-        .reset_index(drop=True)
-    )
-    print(f"🗺 Using {len(counties)} distinct counties for nearest-HQ mapping")
-
-    # 3) Assign nearest county for each firm HQ
-    sp500_with_county = _assign_nearest_county(sp500, counties)
-
-    missing_county = sp500_with_county["county_id_2"].isna().sum()
-    if missing_county > 0:
-        print(
-            f"⚠️ Warning: {missing_county} firms could not be matched to any county. "
-            "They will be dropped from the brightness panel."
-        )
-
-    sp500_with_county = sp500_with_county.dropna(subset=["county_id_2"]).copy()
-
-    # 4) Merge firms with county-month brightness
-    panel = sp500_with_county.merge(
-        lights[
+        panel[
             [
-                "id_2",
+                "ticker",
+                "firm",
+                "state_full",
+                "county_name",
                 "date",
                 "avg_rad_month",
-                "lat_round",
-                "lon_round",
+                "ret",
+                "ret_fwd",
+                "brightness_change",
             ]
-        ],
-        left_on="county_id_2",
-        right_on="id_2",
-        how="inner",
-    )
-
-    panel = panel.rename(columns={"id_2": "county_fips"})
-
-    # Alias for features / plots
-    panel["brightness"] = panel["avg_rad_month"]
-
-    print(f"✅ Built firm × month brightness panel with {len(panel)} rows")
-    print(
-        "   Date range:",
-        panel["date"].min(),
-        "→",
-        panel["date"].max(),
-    )
-    print(
-        "   Example columns:",
-        [c for c in panel.columns if c in ("ticker", "company", "date", "county_name", "brightness")],
+        ]
+        .head(10)
     )
 
     return panel
+
+
+if __name__ == "__main__":
+    build_panel_firms_with_brightness()

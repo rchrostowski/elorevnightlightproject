@@ -5,110 +5,143 @@ import pandas as pd
 
 from src.load_data import load_model_data
 
-# ---------- Page config ----------
 st.set_page_config(
-    page_title="Night Lights & Returns – Main Dashboard",
+    page_title="Night Lights Anomalia Dashboard",
     layout="wide",
 )
 
-st.title("Night Lights & Stock Returns – Dashboard")
+st.markdown(
+    """
+    <style>
+    .main {
+        background-color: #050710;
+        color: #f9fafb;
+    }
+    .block-container {
+        padding-top: 1.5rem;
+        padding-bottom: 1.5rem;
+    }
+    .metric-card {
+        background: #0b0e1a;
+        border-radius: 18px;
+        padding: 1rem 1.25rem;
+        border: 1px solid #15192a;
+    }
+    .metric-label {
+        font-size: 0.85rem;
+        color: #9ca3af;
+    }
+    .metric-value {
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: #f9fafb;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
-# ---------- Load data ----------
-df = load_model_data(fallback_if_missing=True).copy()
+st.title("Night Lights Anomalia Dashboard")
+
+st.markdown(
+    """
+This dashboard links **satellite night-time lights** to **stock returns** for  
+S&P 500 firms, using the brightness of the **county where each firm’s HQ is located**.
+
+Use the tabs on the left to:
+- 🔍 Explore specific **tickers** and their HQ county brightness
+- 🏙 Drill into **counties** and see which firms live there
+- 🌍 View an interactive **globe** of hotspots
+- 📊 Run **regressions** of returns on brightness changes
+"""
+)
+
+# ---------- Load final model data ----------
+df = load_model_data(fallback_if_missing=True)
 
 if df.empty:
     st.error(
-        "nightlights_model_data.csv is missing or empty.\n\n"
-        "Run `python scripts/build_all.py` to rebuild it and commit "
-        "data/final/nightlights_model_data.csv."
+        "Final dataset `nightlights_model_data.csv` is missing or empty.\n\n"
+        "Run `python scripts/build_all.py` and commit "
+        "`data/final/nightlights_model_data.csv`."
     )
     st.stop()
 
 # Basic cleaning
-df["date"] = pd.to_datetime(df["date"], errors="coerce")
-df = df.dropna(subset=["date"])
-df = df[df["date"].notna()]
+if "date" in df.columns:
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df.dropna(subset=["date"])
 
-# restrict to years where we have both lights & returns
-mask = df[["brightness_change", "ret_fwd"]].notna().any(axis=1)
-df_use = df[mask].copy()
-df_use = df_use.sort_values("date")
-
-# ---------- Top-level metrics ----------
-n_firms = df_use["ticker"].nunique()
-n_counties = df_use[["state_full", "county_name"]].drop_duplicates().shape[0]
-date_min = df_use["date"].min()
-date_max = df_use["date"].max()
-
-corr = df_use["brightness_change"].corr(df_use["ret_fwd"])
+# ---------- High-level metrics ----------
+n_rows = len(df)
+n_tickers = df["ticker"].nunique() if "ticker" in df.columns else 0
+n_counties = df["county_name"].nunique() if "county_name" in df.columns else 0
+date_min = df["date"].min() if "date" in df.columns else None
+date_max = df["date"].max() if "date" in df.columns else None
 
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Number of firms", f"{n_firms}")
-col2.metric("HQ counties", f"{n_counties}")
-col3.metric("Date range", f"{date_min:%Y-%m} → {date_max:%Y-%m}")
-col4.metric("Corr(ΔLight, next-month ret)", f"{corr:.3f}" if pd.notna(corr) else "N/A")
 
-st.markdown(
-    """
-Below you have:
+with col1:
+    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+    st.markdown('<div class="metric-label">Observations</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-value">{n_rows:,}</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-- **Overview** (this page): big-picture summary of the dataset  
-- **Ticker Explorer**: focus on one firm’s HQ brightness vs its returns  
-- **County Explorer**: zoom into one HQ county and see all firms there  
-- **Globe**: interactive spinning map of HQ locations & hotspots  
-- **Regression**: the main **Ret ~ ΔBrightness + month fixed effects** result
-    """
-)
+with col2:
+    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+    st.markdown('<div class="metric-label">Tickers</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-value">{n_tickers}</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- Time-series summary ----------
-st.subheader("Average ΔBrightness and Average Next-Month Return Over Time")
+with col3:
+    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+    st.markdown('<div class="metric-label">HQ counties</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-value">{n_counties}</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-group = df_use.groupby("date").agg(
-    avg_dlight=("brightness_change", "mean"),
-    avg_ret_fwd=("ret_fwd", "mean"),
-).reset_index()
+with col4:
+    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+    st.markdown('<div class="metric-label">Sample window</div>', unsafe_allow_html=True)
+    if date_min is not None and date_max is not None:
+        st.markdown(
+            f'<div class="metric-value">'
+            f'{date_min.strftime("%Y-%m")} → {date_max.strftime("%Y-%m")}'
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown('<div class="metric-value">n/a</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# Scale returns to percentages for plotting
-group["avg_ret_fwd_pct"] = group["avg_ret_fwd"] * 100
+# ---------- Simple correlation summary ----------
+if {"brightness_change", "ret_fwd_1m"}.issubset(df.columns):
+    corr_df = df[["brightness_change", "ret_fwd_1m"]].dropna()
+    corr_val = corr_df["brightness_change"].corr(corr_df["ret_fwd_1m"])
+    st.markdown("### Brightness vs. returns (raw correlation, full panel)")
 
-import altair as alt
+    colc1, colc2 = st.columns([1, 3])
+    with colc1:
+        st.metric(
+            "Corr(ΔBrightness, next-month return)",
+            f"{corr_val:.3f}" if pd.notna(corr_val) else "n/a",
+        )
 
-base = alt.Chart(group).encode(x="date:T")
+    with colc2:
+        st.caption(
+            "Correlation of county-level **change in brightness** and **next-month stock return** "
+            "across the full panel (all tickers × months)."
+        )
 
-line_dlight = base.mark_line().encode(
-    y=alt.Y("avg_dlight:Q", title="Average ΔBrightness")
-)
+# ---------- Sample of data ----------
+st.markdown("### Peek at the final dataset")
 
-line_ret = base.mark_line(color="#4c78a8").encode(
-    y=alt.Y("avg_ret_fwd_pct:Q", title="Avg next-month return (%)"),
-).interactive()
+show_cols = [c for c in [
+    "ticker", "firm", "county_name", "state",
+    "date", "avg_rad_month", "brightness_change",
+    "ret", "ret_fwd_1m"
+] if c in df.columns]
 
-st.altair_chart(
-    alt.layer(
-        line_dlight.encode(color=alt.value("#f58518")),
-        line_ret,
-    ).resolve_scale(y="independent"),
+st.dataframe(
+    df.sort_values("date").head(500)[show_cols],
     use_container_width=True,
 )
-
-# ---------- Distribution ----------
-st.subheader("Distribution of HQ Brightness Changes")
-
-hist = (
-    alt.Chart(df_use)
-    .mark_bar()
-    .encode(
-        x=alt.X("brightness_change:Q", bin=alt.Bin(maxbins=50), title="ΔBrightness"),
-        y=alt.Y("count()", title="Count"),
-    )
-)
-
-st.altair_chart(hist, use_container_width=True)
-
-st.caption(
-    "Note: Returns used in this app are *raw monthly stock returns*, "
-    "not market- or risk-adjusted excess returns. We highlight the relation "
-    "between changes in local nightlights and future returns."
-)
-
-
