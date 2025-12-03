@@ -3,22 +3,26 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from pathlib import Path
 
-# We only need paths from config; we'll do the loading logic here
+# ------------------------------------------------------
+# 0. Safe import of data-loading helpers
+# ------------------------------------------------------
 try:
-    from src.config import DATA_INTER, DATA_FINAL
+    from src.load_data import load_lights_monthly_by_coord, load_model_data
 except Exception as e:
+    st.set_page_config(page_title="Night Lights Anomalia Dashboard", layout="wide")
     st.error(
-        "Could not import config paths.\n\n"
-        "Make sure `src/config.py` exists and defines `DATA_INTER` and `DATA_FINAL`.\n\n"
+        "Could not import data-loading functions.\n\n"
+        "Make sure **src/** is a Python package (has `__init__.py`) and that "
+        "`src/load_data.py` defines `load_lights_monthly_by_coord` and "
+        "`load_model_data`.\n\n"
         f"Original error: {e}"
     )
     st.stop()
 
-# -----------------------------------------------------------------------------
-# Page config & styling
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------
+# 1. Page config & light styling
+# ------------------------------------------------------
 st.set_page_config(
     page_title="Night Lights Anomalia Dashboard",
     layout="wide",
@@ -34,27 +38,6 @@ st.markdown(
         padding-top: 1rem;
         padding-bottom: 1rem;
     }
-    .anomaly-card {
-        background: #0b0e1a;
-        border-radius: 18px;
-        padding: 1rem 1.25rem;
-        border: 1px solid #15192a;
-    }
-    .metric-label {
-        font-size: 0.9rem;
-        color: #c8c8d8;
-    }
-    .metric-value {
-        font-size: 1.4rem;
-        font-weight: 600;
-        color: #ffffff;
-    }
-    .panel-title {
-        font-size: 0.95rem;
-        font-weight: 600;
-        margin-bottom: 0.5rem;
-        color: #ffffff;
-    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -65,68 +48,18 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# -----------------------------------------------------------------------------
-# Helper loaders (local, so we don't depend on src.load_data)
-# -----------------------------------------------------------------------------
-def load_lights_monthly_by_coord() -> pd.DataFrame:
-    """
-    Load preprocessed state-level lights panel:
-
-        data/intermediate/lights_monthly_by_coord.csv
-
-    Expected columns (at minimum):
-        - iso        (country code)
-        - name_1     (state name)
-        - date
-        - avg_rad_month
-    """
-    path = DATA_INTER / "lights_monthly_by_coord.csv"
-    if not path.exists():
-        st.error(
-            f"Missing file: {path}\n\n"
-            "Run `python scripts/build_all.py` to generate it, "
-            "commit `lights_monthly_by_coord.csv` to `data/intermediate/`, "
-            "and redeploy."
-        )
-        st.stop()
-
-    df = pd.read_csv(path)
-    if "date" in df.columns:
-        df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    return df
-
-
-def load_model_data() -> pd.DataFrame:
-    """
-    Load final modeling dataset:
-
-        data/final/nightlights_model_data.csv
-
-    Expected (for this page):
-        - date
-        - state or state_name
-        - brightness_change
-        - ret_fwd_1m  (next-month return)
-    """
-    path = DATA_FINAL / "nightlights_model_data.csv"
-    if not path.exists():
-        # Not fatal – we can still show brightness-only globe
-        return pd.DataFrame()
-
-    df = pd.read_csv(path)
-    if "date" in df.columns:
-        df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    return df
-
-
-# -----------------------------------------------------------------------------
-# 1. Load data
-# -----------------------------------------------------------------------------
-lights = load_lights_monthly_by_coord()
-model = load_model_data()
+# ------------------------------------------------------
+# 2. Load data
+# ------------------------------------------------------
+lights = load_lights_monthly_by_coord(fallback_if_missing=True)
+model = load_model_data(fallback_if_missing=True)
 
 if lights.empty:
-    st.error("lights_monthly_by_coord.csv loaded but has no rows.")
+    st.error(
+        "lights_monthly_by_coord.csv is missing or empty.\n\n"
+        "Run `python scripts/build_all.py` to rebuild it, commit the CSV in "
+        "`data/intermediate/`, and redeploy."
+    )
     st.stop()
 
 required_light_cols = {"iso", "name_1", "date", "avg_rad_month"}
@@ -138,22 +71,22 @@ if missing:
     )
     st.stop()
 
-# Keep only USA rows and clean dates
+# Keep only USA, clean dates
 lights = lights[lights["iso"] == "USA"].copy()
 lights["date"] = pd.to_datetime(lights["date"], errors="coerce")
 lights = lights.dropna(subset=["date"])
-
-if not model.empty and "date" in model.columns:
-    model["date"] = pd.to_datetime(model["date"], errors="coerce")
-    model = model.dropna(subset=["date"])
 
 if lights.empty:
     st.error("No valid USA rows in lights panel after cleaning.")
     st.stop()
 
-# -----------------------------------------------------------------------------
-# 2. State mapping: names -> postal & lat/lon
-# -----------------------------------------------------------------------------
+if not model.empty and "date" in model.columns:
+    model["date"] = pd.to_datetime(model["date"], errors="coerce")
+    model = model.dropna(subset=["date"])
+
+# ------------------------------------------------------
+# 3. State mapping: names -> postal + coords
+# ------------------------------------------------------
 STATE_ABBR = {
     "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR",
     "California": "CA", "Colorado": "CO", "Connecticut": "CT", "Delaware": "DE",
@@ -203,9 +136,9 @@ if lights.empty:
     )
     st.stop()
 
-# -----------------------------------------------------------------------------
-# 3. Sidebar controls
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------
+# 4. Sidebar controls
+# ------------------------------------------------------
 st.sidebar.header("Globe controls")
 
 unique_dates = sorted(lights["date"].unique())
@@ -216,9 +149,9 @@ selected_date = st.sidebar.selectbox(
     format_func=lambda d: pd.Timestamp(d).strftime("%Y-%m"),
 )
 
-# -----------------------------------------------------------------------------
-# 4. Filter data & aggregate by state
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------
+# 5. Filter data & aggregate by state
+# ------------------------------------------------------
 lights_month = lights[lights["date"] == selected_date].copy()
 if lights_month.empty:
     st.warning(
@@ -241,16 +174,13 @@ if state_df.empty:
     st.error("No states had coordinates mapped for this month.")
     st.stop()
 
-# -----------------------------------------------------------------------------
-# 5. Attach state-level returns and use them for brightness/size
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------
+# 6. Merge in expected next-month returns (state level)
+# ------------------------------------------------------
 state_df["ret_fwd_1m"] = pd.NA
 state_df["ret_state"] = pd.NA
 
-if (
-    not model.empty
-    and {"ret_fwd_1m", "date"}.issubset(model.columns)
-):
+if not model.empty and {"ret_fwd_1m", "date"}.issubset(model.columns):
     model_month = model[model["date"] == selected_date].copy()
     if not model_month.empty:
         if "state" in model_month.columns:
@@ -270,7 +200,7 @@ if (
 
         state_df["ret_fwd_1m"] = state_df["ret_state"]
 
-# Use returns for visual encoding if available; otherwise fallback to brightness
+# Use returns for dot size / color if available; otherwise brightness
 use_return = state_df["ret_fwd_1m"].notna().any()
 
 if use_return:
@@ -281,10 +211,8 @@ if use_return:
     else:
         # map [-max, max] to [0, 1]
         r_norm = (r / max_abs + 1) / 2.0
-
-    # marker size and color from returns (expected next-month returns)
-    marker_sizes = 8 + 22 * r_norm           # 8 → 30
-    marker_intensity = r_norm                # 0 → dark, 1 → bright blue
+    marker_sizes = 8 + 22 * r_norm        # 8 → 30
+    marker_intensity = r_norm             # 0 → dark, 1 → bright blue
 else:
     b = state_df["avg_rad_month"].astype(float)
     if b.nunique() > 1:
@@ -294,7 +222,7 @@ else:
     marker_sizes = 8 + 22 * b_norm
     marker_intensity = b_norm
 
-# Custom deep-blue colorscale
+# Deep-blue colorscale
 blue_scale = [
     [0.0, "rgb(2, 6, 23)"],
     [0.3, "rgb(13, 37, 88)"],
@@ -302,20 +230,20 @@ blue_scale = [
     [1.0, "rgb(191, 219, 254)"],
 ]
 
-# -----------------------------------------------------------------------------
-# 6. Build interactive globe
-# -----------------------------------------------------------------------------
-def _fmt_hover(row):
-    if use_return and pd.notna(row["ret_fwd_1m"]):
+# ------------------------------------------------------
+# 7. Build interactive spinning globe
+# ------------------------------------------------------
+def _fmt_hover(row, use_return_flag: bool) -> str:
+    if use_return_flag and pd.notna(row["ret_fwd_1m"]):
         return (
             f"{row['state_name']}<br>"
             f"Brightness: {row['avg_rad_month']:.4f}<br>"
-            f"Next-month return: {row['ret_fwd_1m']:.3%}"
+            f"Next-month return: {row['ret_fwd_1m']:.3f}"
         )
     else:
         return f"{row['state_name']}<br>Brightness: {row['avg_rad_month']:.4f}"
 
-hover_text = state_df.apply(_fmt_hover, axis=1)
+hover_text = state_df.apply(_fmt_hover, axis=1, use_return_flag=use_return)
 
 fig = go.Figure()
 
@@ -338,7 +266,7 @@ fig.add_trace(
 )
 
 fig.update_geos(
-    projection_type="orthographic",      # globe
+    projection_type="orthographic",
     projection_rotation=dict(lon=-95, lat=35, roll=0),
     showcountries=True,
     showcoastlines=False,
@@ -353,106 +281,72 @@ fig.update_layout(
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
     margin=dict(l=0, r=0, t=0, b=0),
+    height=650,
 )
 
-# -----------------------------------------------------------------------------
-# 7. Layout: globe + summary panel
-# -----------------------------------------------------------------------------
+# ------------------------------------------------------
+# 8. Layout: globe + summary panel
+# ------------------------------------------------------
 left, right = st.columns([3.2, 1])
 
 with left:
-    st.plotly_chart(fig, use_container_width=True, height=650)
+    st.plotly_chart(fig, use_container_width=True)
 
 with right:
-    # Summary card
-    st.markdown("<div class='anomaly-card'>", unsafe_allow_html=True)
-    st.markdown(
-        f"<div class='panel-title'>{pd.Timestamp(selected_date).strftime('%Y-%m')} summary</div>",
-        unsafe_allow_html=True,
-    )
+    month_str = pd.Timestamp(selected_date).strftime("%Y-%m")
+    st.subheader(f"{month_str} summary")
 
-    avg_brightness = state_df["avg_rad_month"].mean()
-    st.markdown(
-        f"<div class='metric-label'>Avg brightness</div>"
-        f"<div class='metric-value'>{avg_brightness:.3f}</div>",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("<br>", unsafe_allow_html=True)
+    # --- Metrics ---
+    avg_brightness = float(state_df["avg_rad_month"].mean())
+    st.metric("Avg brightness", f"{avg_brightness:.3f}")
 
     if use_return and state_df["ret_fwd_1m"].notna().any():
-        avg_ret = state_df["ret_fwd_1m"].mean()
-        st.markdown(
-            f"<div class='metric-label'>Avg next-month return</div>"
-            f"<div class='metric-value'>{avg_ret:.2%}</div>",
-            unsafe_allow_html=True,
-        )
+        avg_ret = float(state_df["ret_fwd_1m"].mean())
+        st.metric("Avg next-month return", f"{avg_ret:.2%}")
     else:
-        st.markdown(
-            "<div class='metric-label'>Avg next-month return</div>"
-            "<div class='metric-value'>—</div>",
-            unsafe_allow_html=True,
-        )
+        st.metric("Avg next-month return", "N/A")
 
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # Top / bottom states by return (if available)
+    # --- Top / bottom states by expected return ---
     if use_return and state_df["ret_fwd_1m"].notna().any():
-        st.markdown("<br>", unsafe_allow_html=True)
+        sorted_states = state_df.dropna(subset=["ret_fwd_1m"]).copy()
+        sorted_states = sorted_states.sort_values("ret_fwd_1m", ascending=False)
 
-        # Top 5 positive
-        st.markdown("<div class='anomaly-card'>", unsafe_allow_html=True)
-        st.markdown(
-            "<div class='panel-title'>Top 5 states (next-month return)</div>",
-            unsafe_allow_html=True,
-        )
-        top_states = (
-            state_df.dropna(subset=["ret_fwd_1m"])
-            .sort_values("ret_fwd_1m", ascending=False)
-            .head(5)[["state", "state_name", "ret_fwd_1m"]]
+        top5 = (
+            sorted_states.head(5)[["state", "state_name", "ret_fwd_1m", "avg_rad_month"]]
             .rename(
                 columns={
                     "state": "Code",
                     "state_name": "State",
-                    "ret_fwd_1m": "Return",
+                    "ret_fwd_1m": "Next-m return",
+                    "avg_rad_month": "Brightness",
                 }
             )
         )
-        top_states["Return"] = (top_states["Return"] * 100).round(2)
-        st.table(top_states)
 
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        # Bottom 5 negative
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("<div class='anomaly-card'>", unsafe_allow_html=True)
-        st.markdown(
-            "<div class='panel-title'>Bottom 5 states (next-month return)</div>",
-            unsafe_allow_html=True,
-        )
-        bottom_states = (
-            state_df.dropna(subset=["ret_fwd_1m"])
-            .sort_values("ret_fwd_1m", ascending=True)
-            .head(5)[["state", "state_name", "ret_fwd_1m"]]
+        bottom5 = (
+            sorted_states.tail(5)[["state", "state_name", "ret_fwd_1m", "avg_rad_month"]]
             .rename(
                 columns={
                     "state": "Code",
                     "state_name": "State",
-                    "ret_fwd_1m": "Return",
+                    "ret_fwd_1m": "Next-m return",
+                    "avg_rad_month": "Brightness",
                 }
             )
         )
-        bottom_states["Return"] = (bottom_states["Return"] * 100).round(2)
-        st.table(bottom_states)
 
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("##### Top 5 states (expected return)")
+        st.table(top5.style.format({"Next-m return": "{:.2%}", "Brightness": "{:.3f}"}))
+
+        st.markdown("##### Bottom 5 states (expected return)")
+        st.table(bottom5.style.format({"Next-m return": "{:.2%}", "Brightness": "{:.3f}"}))
 
 st.caption(
-    f"Globe shows state-level hotspots for "
-    f"{pd.Timestamp(selected_date).strftime('%Y-%m')}. "
-    "Marker size and color are scaled by expected next-month return when "
-    "available, otherwise by average VIIRS nighttime radiance."
+    "Globe shows state-level hotspots. "
+    "Marker size and color are scaled by **expected next-month return** when "
+    "available; otherwise by average VIIRS nighttime radiance."
 )
+
 
 
 
