@@ -20,7 +20,6 @@ if "county_name" in df.columns:
     df["county_name"] = df["county_name"].astype(str)
     df = df[df["county_name"].str.lower() != "n/a"]
 
-# Keep core regression vars
 needed = {"brightness_change", "ret_fwd_1m"}
 missing = needed - set(df.columns)
 if missing:
@@ -35,8 +34,7 @@ if df.empty:
     st.error("No rows remain after cleaning brightness and return columns.")
     st.stop()
 
-# --- Summary KPIs ---
-
+# ----- Summary KPIs -----
 date_min = df["date"].min()
 date_max = df["date"].max()
 n_obs = len(df)
@@ -58,17 +56,21 @@ with col4:
 
 st.markdown(
     """
-**Interpretation for class:**  
-This is the *working sample* used in the regression tab. Every point is a **ticker–month** with:
-- an HQ county brightness change (`brightness_change`), and  
-- that ticker’s **next-month total return** (`ret_fwd_1m`).
+**How to explain this in class:**  
+Each row in our final dataset is a **ticker–month observation**. For every ticker in the S&P 500,  
+we know:
+
+- the **county where its HQ is located**,  
+- how much that county’s **night-time brightness changed** in that month (`brightness_change`), and  
+- the ticker’s **total return in the **next** month** (`ret_fwd_1m`).
+
+This is the exact sample that feeds the regression in the Regression tab.
 """
 )
 
 st.markdown("---")
 
-# --- Distribution plots: brightness_change and returns ---
-
+# ----- Distributions: brightness_change and returns -----
 colL, colR = st.columns(2)
 
 with colL:
@@ -76,15 +78,17 @@ with colL:
         df,
         x="brightness_change",
         nbins=40,
-        title="Distribution of HQ brightness changes",
+        title="Distribution of HQ brightness changes (Δ brightness)",
     )
     fig_b.update_layout(margin=dict(l=0, r=0, t=40, b=0))
     st.plotly_chart(fig_b, use_container_width=True)
     st.markdown(
         """
-**What this shows:**  
-Most HQ counties have relatively small changes in brightness from month to month,  
-with a few months where the HQ county gets much brighter or much dimmer.
+**Narrative:**  
+This shows how large the **changes in night-lights** around firm HQs typically are.
+
+- Most observations have **small** `brightness_change` (near zero).  
+- A smaller number of months show **big jumps or drops** in brightness, which we interpret as big local activity changes.
 """
     )
 
@@ -99,29 +103,40 @@ with colR:
     st.plotly_chart(fig_r, use_container_width=True)
     st.markdown(
         """
-**What this shows:**  
-This is the distribution of **one-month ahead total stock returns**.  
-We use **total returns (not market-excess)** in the regression, and make that explicit in the text.
+**Narrative:**  
+This is the distribution of the **next-month total stock returns** we are trying to explain.
+
+- Returns are centered somewhere around zero, with both positive and negative outliers.  
+- This is **total return**, not market-excess — we are explicit about that.
 """
     )
 
 st.markdown("---")
 
-# --- Simple scatter: brightness_change vs next-month return ---
-
+# ----- Raw scatter + correlation -----
 st.markdown("### Brightness vs next-month returns (raw relationship)")
 
+corr = df["brightness_change"].corr(df["ret_fwd_1m"])
+colA, colB = st.columns([1.1, 2.9])
+with colA:
+    st.metric("Corr(ΔBrightness, next-month return)", f"{corr:.3f}")
+with colB:
+    st.caption(
+        "This is the plain, unconditional correlation between HQ brightness changes and next-month returns.\n"
+        "The regression later adds month fixed effects to *clean this up* for seasonality and macro shocks."
+    )
+
 fig_scatter = px.scatter(
-    df.sample(min(3000, len(df)), random_state=42),
+    df.sample(min(4000, len(df)), random_state=42),
     x="brightness_change",
     y="ret_fwd_1m",
-    opacity=0.4,
+    opacity=0.35,
     trendline="ols",
     labels={
         "brightness_change": "Δ brightness (HQ county)",
         "ret_fwd_1m": "Next-month total return",
     },
-    title="Raw relationship: ΔBrightness vs next-month total returns",
+    title="Raw relationship: ΔBrightness vs next-month total returns (no controls)",
 )
 fig_scatter.update_layout(margin=dict(l=0, r=0, t=40, b=0))
 st.plotly_chart(fig_scatter, use_container_width=True)
@@ -130,10 +145,14 @@ st.markdown(
     """
 **How this connects to the regression:**  
 
-- This scatter is like a **raw correlation view** – it ignores **seasonality** and macro shocks.  
-- The regression on the **Regression** tab adds **year–month fixed effects** `C(year-month)`:
-  - that means we compare **brighter vs darker HQ counties *within the same calendar month***.  
-  - So the regression coefficient on `brightness_change` is a **seasonality-adjusted version** of what you see here.
+- This chart is like a **visual correlation**: when HQ brightness changes a lot, do returns move?  
+- However, it **ignores the calendar month**. It mixes together:
+  - seasonal patterns (e.g., holiday lights), and  
+  - common macro shocks (e.g., COVID or Fed events).
+
+In the **Regression** tab, we add `C(year-month)` fixed effects:
+
+- That means we are comparing **bright vs dark HQ counties *within the same year–month***.  
+- The coefficient on `brightness_change` in that regression is basically a **seasonality-adjusted version** of what you see here.
 """
 )
-
