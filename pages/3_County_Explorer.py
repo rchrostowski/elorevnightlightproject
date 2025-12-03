@@ -1,100 +1,91 @@
 # pages/3_County_Explorer.py
 
-import pandas as pd
 import streamlit as st
+import pandas as pd
+import numpy as np
 import altair as alt
 
-from src.load_data import load_model_data
+from src.load_data import load_lights_monthly_by_coord
 
 st.set_page_config(page_title="County Explorer", page_icon="🗺️")
 
-st.title("🗺️ County / Area Explorer")
+st.title("🗺️ County Night-Lights Explorer")
 
-df = load_model_data(fallback_if_missing=True).copy()
-df.columns = [c.strip().lower() for c in df.columns]
-
-if "date" not in df.columns or "ret" not in df.columns:
-    st.error("Dataset must have 'date' and 'ret' columns.")
+lights = load_lights_monthly_by_coord(fallback_if_missing=True)
+if lights.empty:
+    st.error(
+        "lights_monthly_by_coord.csv is missing or empty.\n"
+        "Run `python scripts/build_all.py` and commit "
+        "`data/intermediate/lights_monthly_by_coord.csv`."
+    )
     st.stop()
 
-df["date"] = pd.to_datetime(df["date"], errors="coerce")
-df["year_month"] = df["date"].dt.to_period("M").astype(str)
+lights = lights.copy()
+lights.columns = [c.strip().lower() for c in lights.columns]
 
-# Use county-level info if present, else state
-area_col = None
-for cand in ["county_name", "name_2", "state"]:
-    if cand in df.columns:
-        area_col = cand
-        break
-
-if area_col is None:
-    st.error("No county/state column found (e.g. 'county_name', 'name_2', 'state').")
+required = {"iso", "date", "avg_rad_month"}
+if not required.issubset(lights.columns):
+    st.error(
+        f"lights_monthly_by_coord.csv must have columns {required}.\n"
+        f"Found: {lights.columns.tolist()}"
+    )
     st.stop()
 
-brightness_col = None
-for cand in ["brightness", "avg_rad_month", "avg_brightness"]:
-    if cand in df.columns:
-        brightness_col = cand
-        break
+lights = lights[lights["iso"].str.upper() == "USA"].copy()
+lights["date"] = pd.to_datetime(lights["date"], errors="coerce")
+lights = lights.dropna(subset=["date"])
 
-if brightness_col is None:
-    st.error("No brightness column found (e.g. 'brightness', 'avg_rad_month').")
-    st.stop()
+lights["year_month"] = lights["date"].dt.to_period("M").astype(str)
+
+# county name column if available
+area_col = "name_2" if "name_2" in lights.columns else None
 
 with st.sidebar:
     st.header("Filters")
 
-    # pick a single calendar month to avoid mixing seasonality
-    ym_options = sorted(df["year_month"].dropna().unique())
-    ym = st.selectbox("Year-Month (fixed calendar month)", ym_options)
+    ym_options = sorted(lights["year_month"].unique())
+    ym = st.selectbox("Year-month", ym_options, index=len(ym_options) - 1)
 
-    # optional: focus on a subset of areas
-    areas = sorted(df[area_col].dropna().unique())
-    picked_areas = st.multiselect(
-        f"{area_col} filter (optional)",
-        options=areas,
-        default=areas[:20],  # first 20 as default
+    st.caption("Trim brightness outliers")
+    p_low, p_high = st.slider(
+        "Brightness percentile",
+        0.0,
+        100.0,
+        (1.0, 99.0),
+        step=1.0,
     )
 
-# filter to that month
-df_m = df[df["year_month"] == ym].copy()
-if picked_areas:
-    df_m = df_m[df_m[area_col].isin(picked_areas)]
-
-# aggregate at county/month level
-g = (
-    df_m.groupby(area_col, as_index=False)
-    .agg(
-        mean_ret=("ret", "mean"),
-        mean_brightness=(brightness_col, "mean"),
-    )
-)
-
-if g.empty:
-    st.warning("No data for this selection.")
+df_m = lights[lights["year_month"] == ym].copy()
+if df_m.empty:
+    st.warning(f"No county data for {ym}.")
     st.stop()
 
-st.markdown(
-    f"""
-For **{ym}**, each point below is one **{area_col}**, with:
+b = df_m["avg_rad_month"]
+low, high = np.percentile(b, [p_low, p_high])
+df_m = df_m[df_m["avg_rad_month"].between(low, high)]
 
-- X-axis: average brightness in that area  
-- Y-axis: average stock return (ret) for firms mapped to that area  
-- This is basically the cross-sectional relationship the regression is using.
-"""
-)
+st.subheader(f"Brightness distribution across counties – {ym}")
 
-chart = (
-    alt.Chart(g)
-    .mark_circle(size=60, opacity=0.7)
+hist = (
+    alt.Chart(df_m)
+    .mark_bar()
     .encode(
-        x=alt.X("mean_brightness:Q", title="Brightness (mean in area for this month)"),
-        y=alt.Y("mean_ret:Q", title="Monthly return (ret)"),
-        tooltip=[area_col, "mean_brightness:Q", "mean_ret:Q"],
+        x=alt.X("avg_rad_month:Q", bin=alt.Bin(maxbins=50), title="Brightness"),
+        y=alt.Y("count():Q", title="Number of counties"),
     )
-    .properties(height=400)
+    .properties(height=250)
 )
+st.altair_chart(hist, use_container_width=True)
 
-st.altair_chart(chart, use_container_width=True)
+st.subheader("Top 20 brightest counties")
 
+cols = ["avg_rad_month"]
+if area_col:
+    cols = [area_col] + cols
 
+top = (
+    df_m.sort_values("avg_rad_month", ascending=False)
+    .head(20)[cols]
+    .rename(columns={"name_2": "County", "avg_rad_month": "Brightness"})
+)
+st.dataframe(top, use_container_width=True)
