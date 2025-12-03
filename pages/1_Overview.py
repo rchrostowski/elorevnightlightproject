@@ -1,97 +1,139 @@
-# pages/1_Overview.py
-
 import streamlit as st
 import pandas as pd
-import altair as alt
+import plotly.express as px
 
 from src.load_data import load_model_data
 
-st.title("Overview")
+st.markdown("## 1. Overview – sample, variables, and big picture")
 
-df = load_model_data(fallback_if_missing=True).copy()
-
+df = load_model_data(fallback_if_missing=True)
 if df.empty:
-    st.error("nightlights_model_data.csv is missing or empty.")
+    st.error("Final dataset `nightlights_model_data.csv` is missing or empty.")
     st.stop()
 
+df = df.copy()
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 df = df.dropna(subset=["date"])
 
-# Filter to rows with at least one of brightness_change / ret_fwd
-mask = df[["brightness_change", "ret_fwd"]].notna().any(axis=1)
-df = df[mask].sort_values("date")
+# Clean county junk
+if "county_name" in df.columns:
+    df["county_name"] = df["county_name"].astype(str)
+    df = df[df["county_name"].str.lower() != "n/a"]
 
-# Sidebar filters
-st.sidebar.header("Filters")
-min_year = int(df["date"].dt.year.min())
-max_year = int(df["date"].dt.year.max())
+# Keep core regression vars
+needed = {"brightness_change", "ret_fwd_1m"}
+missing = needed - set(df.columns)
+if missing:
+    st.error(f"`nightlights_model_data` is missing columns: {missing}")
+    st.stop()
 
-year_range = st.sidebar.slider(
-    "Year range",
-    min_value=min_year,
-    max_value=max_year,
-    value=(min_year, max_year),
-)
+df["brightness_change"] = pd.to_numeric(df["brightness_change"], errors="coerce")
+df["ret_fwd_1m"] = pd.to_numeric(df["ret_fwd_1m"], errors="coerce")
+df = df.dropna(subset=["brightness_change", "ret_fwd_1m"])
 
-df = df[(df["date"].dt.year >= year_range[0]) & (df["date"].dt.year <= year_range[1])]
+if df.empty:
+    st.error("No rows remain after cleaning brightness and return columns.")
+    st.stop()
 
-# Metrics
-n_firms = df["ticker"].nunique()
-n_counties = df[["state_full", "county_name"]].drop_duplicates().shape[0]
+# --- Summary KPIs ---
+
 date_min = df["date"].min()
 date_max = df["date"].max()
+n_obs = len(df)
+n_tickers = df["ticker"].nunique() if "ticker" in df.columns else 0
+n_counties = df["county_name"].nunique() if "county_name" in df.columns else 0
 
-corr = df["brightness_change"].corr(df["ret_fwd"])
-
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Firms", f"{n_firms}")
-c2.metric("HQ counties", f"{n_counties}")
-c3.metric("Date range", f"{date_min:%Y-%m} → {date_max:%Y-%m}")
-c4.metric("Corr(ΔLight, next-month ret)", f"{corr:.3f}" if pd.notna(corr) else "N/A")
-
-st.markdown("### Average across all firms & HQ counties")
-
-group = df.groupby("date").agg(
-    avg_brightness=("avg_rad_month", "mean"),
-    avg_dlight=("brightness_change", "mean"),
-    avg_ret=("ret", "mean"),
-    avg_ret_fwd=("ret_fwd", "mean"),
-).reset_index()
-
-group["avg_ret_fwd_pct"] = group["avg_ret_fwd"] * 100
-
-base = alt.Chart(group).encode(x="date:T")
-
-chart1 = base.mark_line(color="#f58518").encode(
-    y=alt.Y("avg_dlight:Q", title="Average ΔBrightness")
-)
-
-chart2 = base.mark_line(color="#4c78a8").encode(
-    y=alt.Y("avg_ret_fwd_pct:Q", title="Average next-month return (%)"),
-)
-
-st.altair_chart(
-    alt.layer(chart1, chart2).resolve_scale(y="independent"),
-    use_container_width=True,
-)
-
-st.markdown("### Cross-section: ΔBrightness vs next-month returns")
-
-scatter = (
-    alt.Chart(df)
-    .mark_circle(opacity=0.35)
-    .encode(
-        x=alt.X("brightness_change:Q", title="ΔBrightness (county HQ)"),
-        y=alt.Y("ret_fwd:Q", title="Next-month return"),
-        color=alt.Color("date:T", legend=None),
-        tooltip=["ticker", "firm", "state_full", "county_name", "date", "brightness_change", "ret_fwd"],
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    st.metric("Ticker–month obs.", f"{n_obs:,}")
+with col2:
+    st.metric("Tickers", f"{n_tickers:,}")
+with col3:
+    st.metric("HQ counties", f"{n_counties:,}")
+with col4:
+    st.metric(
+        "Sample window",
+        f"{date_min.strftime('%Y-%m')} → {date_max.strftime('%Y-%m')}",
     )
-    .interactive()
+
+st.markdown(
+    """
+**Interpretation for class:**  
+This is the *working sample* used in the regression tab. Every point is a **ticker–month** with:
+- an HQ county brightness change (`brightness_change`), and  
+- that ticker’s **next-month total return** (`ret_fwd_1m`).
+"""
 )
 
-st.altair_chart(scatter, use_container_width=True)
+st.markdown("---")
 
-st.caption(
-    "This overview page shows how changes in nighttime lights around firm HQs "
-    "line up with *next-month* stock returns, aggregated across the whole sample."
+# --- Distribution plots: brightness_change and returns ---
+
+colL, colR = st.columns(2)
+
+with colL:
+    fig_b = px.histogram(
+        df,
+        x="brightness_change",
+        nbins=40,
+        title="Distribution of HQ brightness changes",
+    )
+    fig_b.update_layout(margin=dict(l=0, r=0, t=40, b=0))
+    st.plotly_chart(fig_b, use_container_width=True)
+    st.markdown(
+        """
+**What this shows:**  
+Most HQ counties have relatively small changes in brightness from month to month,  
+with a few months where the HQ county gets much brighter or much dimmer.
+"""
+    )
+
+with colR:
+    fig_r = px.histogram(
+        df,
+        x="ret_fwd_1m",
+        nbins=40,
+        title="Distribution of next-month total returns",
+    )
+    fig_r.update_layout(margin=dict(l=0, r=0, t=40, b=0))
+    st.plotly_chart(fig_r, use_container_width=True)
+    st.markdown(
+        """
+**What this shows:**  
+This is the distribution of **one-month ahead total stock returns**.  
+We use **total returns (not market-excess)** in the regression, and make that explicit in the text.
+"""
+    )
+
+st.markdown("---")
+
+# --- Simple scatter: brightness_change vs next-month return ---
+
+st.markdown("### Brightness vs next-month returns (raw relationship)")
+
+fig_scatter = px.scatter(
+    df.sample(min(3000, len(df)), random_state=42),
+    x="brightness_change",
+    y="ret_fwd_1m",
+    opacity=0.4,
+    trendline="ols",
+    labels={
+        "brightness_change": "Δ brightness (HQ county)",
+        "ret_fwd_1m": "Next-month total return",
+    },
+    title="Raw relationship: ΔBrightness vs next-month total returns",
 )
+fig_scatter.update_layout(margin=dict(l=0, r=0, t=40, b=0))
+st.plotly_chart(fig_scatter, use_container_width=True)
+
+st.markdown(
+    """
+**How this connects to the regression:**  
+
+- This scatter is like a **raw correlation view** – it ignores **seasonality** and macro shocks.  
+- The regression on the **Regression** tab adds **year–month fixed effects** `C(year-month)`:
+  - that means we compare **brighter vs darker HQ counties *within the same calendar month***.  
+  - So the regression coefficient on `brightness_change` is a **seasonality-adjusted version** of what you see here.
+"""
+)
+
