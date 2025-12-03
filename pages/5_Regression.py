@@ -1,5 +1,3 @@
-# pages/5_Regression.py
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -7,7 +5,7 @@ import statsmodels.api as sm
 
 from src.load_data import load_model_data
 
-st.markdown("## 📊 Regression: Returns on Night-Lights (with Month Fixed Effects)")
+st.markdown("## 5. Regression – Returns on HQ Night-Lights with Month Fixed Effects")
 
 df = load_model_data(fallback_if_missing=True)
 if df.empty:
@@ -48,11 +46,18 @@ We estimate the regression:
 + \gamma_{\text{month}(t)} + \varepsilon_{i,t}
 \]
 
-- **`ret_fwd_1m`** = ticker's **next-month total return** (not excess over the risk-free rate).  
-- **`brightness_change`** = change in VIIRS night-lights for the HQ county from month \(t-1\) to \(t\).  
-- \(\gamma_{\text{month}(t)}\) are **calendar month fixed effects** (C(year-month)), which:
-  - compare **brighter vs darker counties *within the same calendar month***,
-  - soak up seasonality, business-cycle effects, etc.
+Where:
+
+- **Dependent variable**: `ret_fwd_1m` = ticker’s **next-month total return**  
+  (we are *not* subtracting the risk-free rate or market return – this is made explicit).  
+- **Key regressor**: `brightness_change` = change in HQ county night-lights from month \(t-1\) to \(t\).  
+- \(\gamma_{\text{month}(t)}\) = **year–month fixed effects** `C(year-month)`:
+  - compares **bright vs dark HQ counties within the *same calendar month***,  
+  - controls for **seasonality** and macro effects in that month.
+
+The coefficient **β** answers:
+
+> Holding the calendar month fixed, do firms in HQ counties that brighten more tend to have higher next-month returns?
 """
 )
 
@@ -128,9 +133,9 @@ with colB:
 - **R²**: {results.rsquared:.3f}  
 - **Adj. R²**: {results.rsquared_adj:.3f}  
 
-Interpretation of **β (brightness_change)**:
+**Interpretation of β (brightness_change):**
 
-- Compares **counties that are relatively brighter vs darker within the *same year-month***.  
+- Compares **counties that are relatively brighter vs darker within the *same year–month***.  
 - If β > 0: brighter HQ counties in a given month tend to have **higher next-month returns**.  
 - If β < 0: brighter HQ counties in a given month tend to have **lower next-month returns**.
 """
@@ -166,3 +171,4 @@ if show_fe:
     )
     st.markdown("#### Example month fixed effects (relative to base month)")
     st.dataframe(fe_df.head(10), use_container_width=True)
+
