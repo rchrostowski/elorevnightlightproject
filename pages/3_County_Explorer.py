@@ -15,13 +15,19 @@ df = df.copy()
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 df = df.dropna(subset=["date"])
 
-needed = {"ticker", "firm", "county_name", "state", "brightness_change", "ret_fwd_1m"}
+needed = {"ticker", "firm", "county_name", "brightness_change", "ret_fwd_1m"}
 missing = needed - set(df.columns)
 if missing:
     st.error(f"`nightlights_model_data` must contain: {needed}. Missing: {missing}")
     st.stop()
 
-# Clean county junk
+# Try to find a state-like column, but don't require it
+state_col = None
+for cand in ["state", "hq_state", "state_name"]:
+    if cand in df.columns:
+        state_col = cand
+        break
+
 df["county_name"] = df["county_name"].astype(str)
 df = df[df["county_name"].str.lower() != "n/a"]
 
@@ -33,33 +39,47 @@ if df.empty:
     st.error("No usable rows after cleaning `brightness_change` and `ret_fwd_1m`.")
     st.stop()
 
-# Build county key
-df["county_key"] = df["county_name"] + ", " + df["state"].astype(str)
-county_keys = sorted(df["county_key"].unique())
+# Build a display label for counties
+if state_col:
+    df["state_display"] = df[state_col].astype(str)
+    df["county_key"] = df["county_name"] + ", " + df["state_display"]
+else:
+    df["state_display"] = ""
+    df["county_key"] = df["county_name"]
 
+county_keys = sorted(df["county_key"].unique())
 default_key = "Santa Clara County, CA" if "Santa Clara County, CA" in county_keys else county_keys[0]
 
 county_key = st.selectbox("Select HQ county:", options=county_keys, index=county_keys.index(default_key))
 
-county_name, state = county_key.split(", ", 1)
-df_c = df[(df["county_name"] == county_name) & (df["state"] == state)].sort_values("date").copy()
+if state_col:
+    # Split "County, ST"
+    if ", " in county_key:
+        county_name, state_disp = county_key.split(", ", 1)
+    else:
+        county_name, state_disp = county_key, ""
+    df_c = df[(df["county_name"] == county_name) & (df["state_display"] == state_disp)].copy()
+else:
+    county_name = county_key
+    df_c = df[df["county_name"] == county_name].copy()
+
+df_c = df_c.sort_values("date")
 
 st.markdown(
     f"""
-**Selected county:** {county_name}, {state}  
+**Selected HQ county:** {county_key}  
 
-This page answers:
+This tab answers:
 
-- Which **tickers** have HQs in this county?  
-- How do their **next-month returns** behave when the **HQ lights brighten or dim**?  
-- How does this county fit into the overall regression story.
+- Which **firms** are headquartered in this county?  
+- How do their **next-month returns** behave when **local night-time lights change**?  
+- How the county-level patterns connect back to the global regression.
 """
 )
 
 st.markdown("---")
 
-# --- 1. Firms in this county ---
-
+# ----- A. Firms headquartered in this county -----
 st.markdown("### A. Firms headquartered in this county")
 
 firm_summary = (
@@ -88,21 +108,21 @@ st.dataframe(
 
 st.markdown(
     """
-**How to read this table:**  
+**How to explain this table:**  
 
-- Each row is a **ticker headquartered in this county**.  
-- `Avg next-month return` is the **mean of `ret_fwd_1m`** for that ticker in this county.  
-- `Avg Δ brightness` is the **average change in HQ night-lights** over the sample.  
+- Each row is a **firm whose HQ county is the one selected above**.  
+- `# months` is how many ticker-months we see for that firm in the sample.  
+- `Avg Δ brightness` is the **average change in the county’s night-lights** over the sample window.  
+- `Avg next-month return` is the **average of `ret_fwd_1m`** for that firm.
 
-This links the **spatial unit** (county) to the **economic outcome** (stock returns).
+This helps connect the **geography (county)** to **actual names of firms** people recognize.
 """
 )
 
 st.markdown("---")
 
-# --- 2. Time series: county brightness vs county average return ---
-
-st.markdown("### B. County time series: average return vs HQ brightness change")
+# ----- B. County-level time series: average return and brightness -----
+st.markdown("### B. County time series – average return vs average Δ brightness")
 
 df_c_month = (
     df_c.groupby("date", as_index=False)
@@ -114,7 +134,7 @@ df_c_month = (
 )
 
 if len(df_c_month) < 3:
-    st.warning("Not enough data for time-series visualization in this county.")
+    st.warning("Not enough data for a meaningful time-series in this county.")
 else:
     colL, colR = st.columns(2)
 
@@ -142,21 +162,20 @@ else:
 
     st.markdown(
         """
-**What this pair of plots shows:**  
+**Narrative:**  
 
-- Left: when this county’s HQ firms, on average, have **high next-month returns**.  
-- Right: when the **night-time lights in this county spike or drop**.  
+- The **left plot** shows how the **average next-month return** of HQ firms in this county evolves over time.  
+- The **right plot** shows how the **average change in night-time brightness** of the county evolves.
 
-The fixed-effects regression in the next tab basically asks:  
-> *Across all counties and months, do months where HQ counties brighten more tend to be followed by months with higher average returns?*
+The fixed-effects regression is essentially using this kind of information but **across all counties at once**,  
+asking whether **unusually bright months in a county** are followed by **unusually high returns** for firms headquartered there.
 """
     )
 
 st.markdown("---")
 
-# --- 3. County-level scatter: ΔBrightness vs next-month return (all ticker-months) ---
-
-st.markdown("### C. County scatter: ΔBrightness vs next-month returns (all firms)")
+# ----- C. County scatter: ΔBrightness vs next-month returns (all ticker-months) -----
+st.markdown("### C. County scatter – ΔBrightness vs next-month returns across firms")
 
 if len(df_c) >= 10:
     fig_sc = px.scatter(
@@ -169,20 +188,28 @@ if len(df_c) >= 10:
             "ret_fwd_1m": "Next-month total return",
             "ticker": "Ticker",
         },
-        title=f"{county_key}: ΔBrightness vs next-month returns across tickers",
+        title=f"{county_key}: ΔBrightness vs next-month total returns for all HQ firms",
     )
     fig_sc.update_layout(margin=dict(l=0, r=0, t=40, b=0))
     st.plotly_chart(fig_sc, use_container_width=True)
 
     st.markdown(
         """
-**How this ties into the overall regression:**  
+**How this ties into the regression:**  
 
-- Here we ignore fixed effects and just look at **all ticker–months in this one county**.  
-- In the **Regression** tab, we pool **all counties and tickers** and add **year–month fixed effects**:  
-  - that gives a clean estimate of whether **unusually bright HQ months** are linked to **unusually high next-month returns**,  
-  - after controlling for **time effects** common to all firms.
+- This chart is a **micro version** of the main regression, focusing on a single county.  
+- Each dot is a **firm–month**:
+  - x-axis: the change in brightness around the HQ that month,  
+  - y-axis: the firm’s next-month total return.
+
+In the **Regression** tab, we:
+
+- pool all counties and firms together,  
+- add **year–month fixed effects** `C(year-month)`,  
+- and estimate a global **β on `brightness_change`** that tells us whether brighter HQ months
+  are systematically followed by higher or lower returns.
 """
     )
 else:
     st.info("Too few observations in this county to show a meaningful scatter.")
+
