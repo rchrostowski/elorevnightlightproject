@@ -2,107 +2,98 @@
 
 import streamlit as st
 import pandas as pd
-import numpy as np
 import altair as alt
-from pathlib import Path
 
-st.set_page_config(page_title="County Explorer", page_icon="🗺️")
+from src.load_data import load_model_data
 
-st.title("🗺️ County Night-Lights Explorer")
+st.title("County Explorer")
 
-
-def load_lights_monthly_by_coord_local() -> pd.DataFrame:
-    path = Path("data/intermediate/lights_monthly_by_coord.csv")
-    if not path.exists():
-        st.error(
-            "data/intermediate/lights_monthly_by_coord.csv not found.\n"
-            "Run `python scripts/build_all.py`, commit that CSV, and push."
-        )
-        st.stop()
-    try:
-        df = pd.read_csv(path)
-    except Exception as e:
-        st.error(f"Error reading {path}: {e}")
-        st.stop()
-    return df
-
-
-lights = load_lights_monthly_by_coord_local()
-if lights.empty:
-    st.error("lights_monthly_by_coord.csv is empty.")
+df = load_model_data(fallback_if_missing=True).copy()
+if df.empty:
+    st.error("nightlights_model_data.csv is missing or empty.")
     st.stop()
 
-lights = lights.copy()
-lights.columns = [c.strip().lower() for c in lights.columns]
+df["date"] = pd.to_datetime(df["date"], errors="coerce")
+df = df.dropna(subset=["date"])
 
-required = {"iso", "date", "avg_rad_month"}
-missing = required - set(lights.columns)
-if missing:
-    st.error(
-        f"lights_monthly_by_coord.csv must have columns {required}.\n"
-        f"Missing: {missing}\n"
-        f"Found: {lights.columns.tolist()}"
+mask = df[["brightness_change", "ret_fwd"]].notna().any(axis=1)
+df = df[mask].sort_values("date")
+
+# Sidebar selection
+st.sidebar.header("County selection")
+
+state_list = sorted(df["state_full"].dropna().unique())
+state = st.sidebar.selectbox("State", options=state_list)
+
+df_state = df[df["state_full"] == state]
+county_list = sorted(df_state["county_name"].dropna().unique())
+county = st.sidebar.selectbox("County", options=county_list)
+
+df_c = df_state[df_state["county_name"] == county].copy()
+if df_c.empty:
+    st.warning("No data for this county.")
+    st.stop()
+
+st.subheader(f"{county}, {state}")
+
+# Firms in this county
+firms = df_c[["ticker", "firm"]].drop_duplicates().sort_values("ticker")
+st.markdown("**Firms headquartered in this county:**")
+st.table(firms)
+
+# Aggregate over firms in the county
+agg = (
+    df_c.groupby("date")
+    .agg(
+        avg_brightness=("avg_rad_month", "mean"),
+        avg_dlight=("brightness_change", "mean"),
+        avg_ret_fwd=("ret_fwd", "mean"),
+        n_firms=("ticker", "nunique"),
     )
-    st.stop()
+    .reset_index()
+)
 
-lights = lights[lights["iso"].astype(str).str.upper() == "USA"].copy()
-lights["date"] = pd.to_datetime(lights["date"], errors="coerce")
-lights = lights.dropna(subset=["date"])
+agg["avg_ret_fwd_pct"] = agg["avg_ret_fwd"] * 100
 
-lights["year_month"] = lights["date"].dt.to_period("M").astype(str)
+c1, c2 = st.columns(2)
+c1.metric("Average number of firms per month", f"{agg['n_firms'].mean():.1f}")
+c2.metric("Obs (month-county)", f"{len(agg)}")
 
-area_col = "name_2" if "name_2" in lights.columns else None
+st.markdown("### County average: ΔBrightness and next-month returns")
 
-with st.sidebar:
-    st.header("Filters")
+base = alt.Chart(agg).encode(x="date:T")
 
-    ym_options = sorted(lights["year_month"].unique())
-    ym = st.selectbox("Year-month", ym_options, index=len(ym_options) - 1)
+line_dlight = base.mark_line(color="#f58518").encode(
+    y=alt.Y("avg_dlight:Q", title="Average ΔBrightness"),
+)
 
-    st.caption("Trim brightness outliers")
-    p_low, p_high = st.slider(
-        "Brightness percentile",
-        0.0,
-        100.0,
-        (1.0, 99.0),
-        step=1.0,
-    )
+line_ret = base.mark_line(color="#4c78a8").encode(
+    y=alt.Y("avg_ret_fwd_pct:Q", title="Avg next-month return (%)"),
+)
 
-df_m = lights[lights["year_month"] == ym].copy()
-if df_m.empty:
-    st.warning(f"No county data for {ym}.")
-    st.stop()
+st.altair_chart(
+    alt.layer(line_dlight, line_ret).resolve_scale(y="independent"),
+    use_container_width=True,
+)
 
-b = df_m["avg_rad_month"]
-low, high = np.percentile(b, [p_low, p_high])
-df_m = df_m[df_m["avg_rad_month"].between(low, high)]
+st.markdown("### Firm-level scatter in this county")
 
-if df_m.empty:
-    st.warning("No counties after percentile filter.")
-    st.stop()
-
-st.subheader(f"Brightness distribution across counties – {ym}")
-
-hist = (
-    alt.Chart(df_m)
-    .mark_bar()
+scatter = (
+    alt.Chart(df_c)
+    .mark_circle(opacity=0.4)
     .encode(
-        x=alt.X("avg_rad_month:Q", bin=alt.Bin(maxbins=50), title="Brightness"),
-        y=alt.Y("count():Q", title="Number of counties"),
+        x=alt.X("brightness_change:Q", title="ΔBrightness (firm's HQ county)"),
+        y=alt.Y("ret_fwd:Q", title="Next-month return"),
+        color=alt.Color("ticker:N", legend=None),
+        tooltip=["ticker", "firm", "date", "brightness_change", "ret_fwd"],
     )
-    .properties(height=250)
+    .interactive()
 )
-st.altair_chart(hist, use_container_width=True)
 
-st.subheader("Top 20 brightest counties")
+st.altair_chart(scatter, use_container_width=True)
 
-cols = ["avg_rad_month"]
-if area_col:
-    cols = [area_col] + cols
-
-top = (
-    df_m.sort_values("avg_rad_month", ascending=False)
-    .head(20)[cols]
-    .rename(columns={"name_2": "County", "avg_rad_month": "Brightness"})
+st.caption(
+    "This page zooms into a single HQ county and shows both the average "
+    "relationship and the firm-by-firm scatter of ΔBrightness vs next-month returns."
 )
-st.dataframe(top, use_container_width=True)
+
