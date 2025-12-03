@@ -17,16 +17,13 @@ if not required.issubset(df.columns):
     st.error(f"`nightlights_model_data` must contain at least: {required}")
     st.stop()
 
-# --- Clean & ensure numeric ---
-
+# ---------- Clean & ensure numeric ----------
 df = df.copy()
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
-# Force numeric for regression variables
 df["brightness_change"] = pd.to_numeric(df["brightness_change"], errors="coerce")
 df["ret_fwd_1m"] = pd.to_numeric(df["ret_fwd_1m"], errors="coerce")
 
-# Drop rows with missing anything we need
 df = df.dropna(subset=["date", "brightness_change", "ret_fwd_1m"])
 
 if df.empty:
@@ -36,74 +33,70 @@ if df.empty:
     )
     st.stop()
 
-# Explain what "ret" is
 st.markdown(
     r"""
-We estimate the regression:
+We estimate the following regression:
 
 \[
 \text{ret\_{fwd, i,t}} = \alpha + \beta \cdot \Delta \text{Brightness}\_{i,t}
-+ \gamma_{\text{month}(t)} + \varepsilon_{i,t}
++ \gamma_{\text{year-month}(t)} + \varepsilon_{i,t}
 \]
 
 Where:
 
-- **Dependent variable**: `ret_fwd_1m` = ticker’s **next-month total return**  
-  (we are *not* subtracting the risk-free rate or market return – this is made explicit).  
-- **Key regressor**: `brightness_change` = change in HQ county night-lights from month \(t-1\) to \(t\).  
-- \(\gamma_{\text{month}(t)}\) = **year–month fixed effects** `C(year-month)`:
-  - compares **bright vs dark HQ counties within the *same calendar month***,  
-  - controls for **seasonality** and macro effects in that month.
+- **Dependent variable**: `ret_fwd_1m`  
+  - This is the **total next-month return** on ticker \(i\) (we are not subtracting market or risk-free returns).  
+- **Key regressor**: `brightness_change`  
+  - The change in HQ **county night-lights** from month \(t-1\) to \(t\).  
+- **Fixed effects**: \(\gamma_{\text{year-month}(t)}\)  
+  - Implemented as **year–month dummies** `C(year-month)`.  
+  - They compare **bright vs dark HQ counties *within the same calendar month***, and absorb:
+    - seasonal patterns, and  
+    - common macro / market shocks.
 
-The coefficient **β** answers:
+Our main question:
 
-> Holding the calendar month fixed, do firms in HQ counties that brighten more tend to have higher next-month returns?
+> “After controlling for the calendar month, do firms in HQ counties that brighten more tend to have higher next-month returns?”
 """
 )
 
-# --- 1. Raw correlation (no controls) ---
-
-corr = df["brightness_change"].corr(df["ret_fwd_1m"])
+# ---------- 1. Raw correlation ----------
 st.markdown("### 1. Raw correlation (no controls)")
 
-col1, col2 = st.columns(2)
+corr = df["brightness_change"].corr(df["ret_fwd_1m"])
+
+col1, col2 = st.columns([1.1, 2.9])
 with col1:
     st.metric("Corr(ΔBrightness, next-month return)", f"{corr:.3f}")
 with col2:
     st.caption(
-        "This is the plain correlation across all ticker–months, with **no controls**.\n"
-        "The fixed-effects regression below is the 'seasonality-adjusted' version of this."
+        "This is the simple correlation, with **no fixed effects**. "
+        "It mixes together cross-sectional, seasonal, and macro effects."
     )
 
-# --- 2. Fixed-effects regression: ret_fwd_1m ~ brightness_change + C(year-month) ---
-
-st.markdown("### 2. Fixed-effects regression (C(year-month))")
+# ---------- 2. Fixed-effects regression ----------
+st.markdown("### 2. Fixed-effects regression: ret_fwd_1m ~ brightness_change + C(year-month)")
 
 # Year-month label for fixed effects
 df["ym"] = df["date"].dt.to_period("M").astype(str)
 
-# Month dummies (drop_first=True to avoid dummy trap)
+# Month dummies (drop one to avoid dummy trap)
 month_dummies = pd.get_dummies(df["ym"], prefix="ym", drop_first=True)
 
-# Design matrix: constant + brightness_change + month dummies
 X = pd.concat([df[["brightness_change"]], month_dummies], axis=1)
 X = sm.add_constant(X)
 
-# Ensure everything is float (statsmodels hates object dtype)
 X = X.astype(float)
 y = df["ret_fwd_1m"].astype(float)
 
-# Fit OLS
 model = sm.OLS(y.values, X.values)
 results = model.fit()
 
-# Rebuild param index using our column names
 params = pd.Series(results.params, index=X.columns)
 bse = pd.Series(results.bse, index=X.columns)
 tvals = pd.Series(results.tvalues, index=X.columns)
 pvals = pd.Series(results.pvalues, index=X.columns)
 
-# Extract main coefficient (brightness_change)
 beta = params.get("brightness_change", np.nan)
 se_beta = bse.get("brightness_change", np.nan)
 t_beta = tvals.get("brightness_change", np.nan)
@@ -122,43 +115,59 @@ coef_df = pd.DataFrame(
 colA, colB = st.columns([1.2, 2.8])
 
 with colA:
-    st.markdown("#### Key coefficient (within-month comparison)")
+    st.markdown("#### Key coefficient on ΔBrightness")
     st.dataframe(coef_df, use_container_width=True)
 
 with colB:
-    st.markdown("#### Model summary")
+    st.markdown("#### Model summary and interpretation")
     st.markdown(
         f"""
 - **Observations**: {int(results.nobs):,}  
 - **R²**: {results.rsquared:.3f}  
 - **Adj. R²**: {results.rsquared_adj:.3f}  
 
-**Interpretation of β (brightness_change):**
+**How to interpret β (`brightness_change`):**
 
-- Compares **counties that are relatively brighter vs darker within the *same year–month***.  
-- If β > 0: brighter HQ counties in a given month tend to have **higher next-month returns**.  
-- If β < 0: brighter HQ counties in a given month tend to have **lower next-month returns**.
+- This coefficient compares **HQ counties that are relatively brighter vs relatively darker *within the same year–month***.  
+- A **positive** β would mean:
+  - In a given calendar month, firms in HQ counties that brighten more tend to have **higher next-month returns**.  
+- A **negative** β would mean:
+  - In a given calendar month, firms in HQ counties that brighten more tend to have **lower next-month returns**.  
+
+Because we include **year–month fixed effects**, β is **not** driven by things like:
+
+- Christmas or holiday lights,  
+- COVID months,  
+- Fed events, etc.
+
+Those broad month-level shocks are absorbed by the fixed effects.
 """
     )
 
-# --- 3. How this relates to simple correlation ---
-
-st.markdown("### 3. How this relates to correlation")
+# ---------- 3. Connect back to the rest of the dashboard ----------
+st.markdown("### 3. How this regression connects to the other tabs")
 
 st.markdown(
     """
-- The simple correlation mixes together:
-  - cross-sectional differences across months, and  
-  - seasonality / market-wide shocks.  
+- **Overview tab**: shows the **distribution** of `brightness_change` and `ret_fwd_1m`, plus the **raw scatter** between them.  
+  - That’s like a **simple correlation view** with no controls.  
 
-- The fixed-effects regression is like a **seasonality-adjusted correlation**:
-  - Within each calendar month, it looks at **which HQ counties got brighter/dimmer**,  
-  - and asks whether those firms’ stocks had systematically different **next-month returns**.
+- **Ticker Explorer**: zooms in on a **single firm**.  
+  - You see the firm’s **HQ brightness changes over time** and its **next-month returns**.  
+  - The mini scatter for that firm is like a small, firm-level version of this regression.  
+
+- **County Explorer**: zooms in on a **single county**.  
+  - It shows which HQ firms are located there and how their returns behave when the **county’s lights change**.  
+
+- **Regression tab (this one)**:  
+  - pools **all firms and all counties**,  
+  - uses **`ret_fwd_1m` as the dependent variable**,  
+  - uses **`brightness_change` as the main predictor**,  
+  - and includes **year–month fixed effects** `C(year-month)` to provide the cleanest estimate of the relationship.
 """
 )
 
-# --- Optional: show some month fixed effects ---
-
+# Optional: show some month fixed effects
 show_fe = st.checkbox("Show a few month fixed effects (γ_month)", value=False)
 
 if show_fe:
@@ -170,5 +179,5 @@ if show_fe:
         .sort_values("Coef.")
     )
     st.markdown("#### Example month fixed effects (relative to base month)")
-    st.dataframe(fe_df.head(10), use_container_width=True)
+    st.dataframe(fe_df.head(15), use_container_width=True)
 
