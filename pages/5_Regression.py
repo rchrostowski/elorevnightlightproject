@@ -3,136 +3,137 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from math import erf, sqrt
+import statsmodels.api as sm
 
 from src.load_data import load_model_data
 
-st.title("Regression: Returns on Nightlights (with Month Fixed Effects)")
+st.markdown("## 📊 Regression: Returns on Night-Lights (with Month Fixed Effects)")
 
-df = load_model_data(fallback_if_missing=True).copy()
+df = load_model_data(fallback_if_missing=True)
 if df.empty:
-    st.error("nightlights_model_data.csv is missing or empty.")
+    st.error("Final dataset is missing. Run `python scripts/build_all.py` first.")
     st.stop()
 
+required = {"date", "brightness_change", "ret_fwd_1m"}
+if not required.issubset(df.columns):
+    st.error(f"`nightlights_model_data` must contain at least: {required}")
+    st.stop()
+
+# Clean
+df = df.copy()
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
-df = df.dropna(subset=["date"])
+df = df.dropna(subset=["date", "brightness_change", "ret_fwd_1m"])
 
-# We use next-month returns as the dependent variable
-df = df.dropna(subset=["brightness_change", "ret_fwd"]).copy()
-df["month"] = df["date"].dt.to_period("M").astype(str)
-
-st.sidebar.header("Regression options")
-year_min = int(df["date"].dt.year.min())
-year_max = int(df["date"].dt.year.max())
-
-year_range = st.sidebar.slider(
-    "Year range",
-    min_value=year_min,
-    max_value=year_max,
-    value=(year_min, year_max),
-)
-
-df = df[(df["date"].dt.year >= year_range[0]) & (df["date"].dt.year <= year_range[1])]
-
-if len(df) < 30:
-    st.warning("Not enough observations in this period to run a meaningful regression.")
-    st.stop()
-
+# Explain what "ret" is
 st.markdown(
     """
-We estimate:
+We estimate the regression:
 
 \\[
-\\text{Ret}_{i,t+1} = \\alpha + \\beta \\cdot \\Delta \\text{Light}_{i,t} + \\gamma_t + \\varepsilon_{i,t},
+\\text{ret\_{fwd, i,t}} = \\alpha + \\beta \\cdot \\Delta \\text{Brightness}\_{i,t}
++ \\gamma_{\\text{month}(t)} + \\varepsilon\_{i,t}
 \\]
 
-where:
-
-- \\(\\Delta \\text{Light}_{i,t}\\) = change in average nightlights around firm *i*'s HQ county in month *t*
-- \\(\\gamma_t\\) = **month fixed effects** (one dummy per calendar month, which removes seasonality)
-- Dependent variable is **next-month raw stock return** (not excess return).
+- **ret_fwd_1m** = ticker's **next-month total return** (not excess over the risk-free rate).  
+- **brightness_change** = change in VIIRS night-lights for the HQ county from month \\(t-1\\) to \\(t\\).  
+- \\(\\gamma_{\\text{month}(t)}\\) are **calendar month fixed effects** (C(year-month)), which:
+  - compare **brighter vs darker counties *within the same calendar month***,
+  - soak up seasonality, business-cycle effects, etc.
 """
 )
 
-# ---------- Within (demeaned) regression: Ret_fwd ~ brightness_change + month FE ----------
+# --- Raw correlation (no controls) ---
 
-x = df["brightness_change"].astype(float)
-y = df["ret_fwd"].astype(float)
+corr = df["brightness_change"].corr(df["ret_fwd_1m"])
+st.markdown("### 1. Raw correlation (no controls)")
 
-# Demean by month (fixed effects)
-g = df.groupby("month")
-x_tilde = x - g["brightness_change"].transform("mean")
-y_tilde = y - g["ret_fwd"].transform("mean")
+col1, col2 = st.columns(2)
+with col1:
+    st.metric("Corr(ΔBrightness, next-month return)", f"{corr:.3f}")
+with col2:
+    st.caption(
+        "This is just the plain correlation across all ticker-months, with **no controls**.\n"
+        "The professor's FE regression is the 'seasonality-adjusted' version of this."
+    )
 
-valid = x_tilde.notna() & y_tilde.notna()
-x_tilde = x_tilde[valid]
-y_tilde = y_tilde[valid]
+# --- 2. Fixed-effects regression: ret_fwd_1m ~ brightness_change + C(year-month) ---
 
-n = len(x_tilde)
-if n < 10:
-    st.warning("Not enough non-missing observations after demeaning.")
-    st.stop()
+st.markdown("### 2. Fixed-effects regression (C(year-month))")
 
-# OLS on demeaned data (no intercept)
-xx = np.sum(x_tilde ** 2)
-xy = np.sum(x_tilde * y_tilde)
+df["ym"] = df["date"].dt.to_period("M").astype(str)
 
-beta = xy / xx
-resid = y_tilde - beta * x_tilde
+# Build design matrix: brightness + month dummies
+month_dummies = pd.get_dummies(df["ym"], prefix="ym", drop_first=True)
+X = pd.concat([df[["brightness_change"]], month_dummies], axis=1)
+X = sm.add_constant(X)
+y = df["ret_fwd_1m"]
 
-# sigma^2 and standard error
-sigma2 = np.sum(resid ** 2) / (n - 1)  # rough dof; FE exact dof is more complicated
-var_beta = sigma2 / xx
-se_beta = np.sqrt(var_beta)
+model = sm.OLS(y, X)
+results = model.fit()
 
-t_stat = beta / se_beta
-# Normal approximation for p-value
-def normal_cdf(z):
-    return 0.5 * (1 + erf(z / sqrt(2.0)))
+# Extract main coefficient (brightness_change)
+beta = results.params.get("brightness_change", np.nan)
+se_beta = results.bse.get("brightness_change", np.nan)
+t_beta = results.tvalues.get("brightness_change", np.nan)
+p_beta = results.pvalues.get("brightness_change", np.nan)
 
-p_value = 2 * (1 - normal_cdf(abs(t_stat)))
-
-st.markdown("### Coefficient on ΔBrightness (within month)")
-
-coef_table = pd.DataFrame(
+coef_df = pd.DataFrame(
     {
         "term": ["brightness_change"],
         "Coef.": [beta],
         "Std.Err.": [se_beta],
-        "t": [t_stat],
-        "P>|t|": [p_value],
+        "t": [t_beta],
+        "P>|t|": [p_beta],
     }
 )
 
-st.dataframe(coef_table.style.format({"Coef.": "{:.4f}", "Std.Err.": "{:.4f}", "t": "{:.2f}", "P>|t|": "{:.3f}"}),
-             use_container_width=True)
+colA, colB = st.columns([1.2, 2.8])
 
-st.markdown("### Scatter of demeaned variables (after month fixed effects)")
+with colA:
+    st.markdown("#### Key coefficient (within-month comparison)")
+    st.dataframe(coef_df, use_container_width=True)
 
-df_plot = pd.DataFrame({"x_tilde": x_tilde, "y_tilde": y_tilde})
+with colB:
+    st.markdown("#### Model summary")
+    st.markdown(
+        f"""
+- **Observations**: {int(results.nobs):,}  
+- **R²**: {results.rsquared:.3f}  
+- **Adj. R²**: {results.rsquared_adj:.3f}  
 
-import altair as alt
+Interpretation of **β (brightness_change)**:
 
-scatter = (
-    alt.Chart(df_plot)
-    .mark_circle(opacity=0.4)
-    .encode(
-        x=alt.X("x_tilde:Q", title="ΔBrightness (demeaned within month)"),
-        y=alt.Y("y_tilde:Q", title="Next-month return (demeaned within month)"),
+- Compares **counties that are relatively brighter vs darker *within the same year-month***  
+- If β > 0: brighter counties in a given month tend to have **higher next-month returns**  
+- If β < 0: brighter counties in a given month tend to have **lower next-month returns**
+"""
     )
+
+# Optional: show a short FE vs no-FE comparison
+st.markdown("### 3. How this relates to correlation")
+
+st.markdown(
+    """
+- The simple correlation above mixes together:
+  - cross-sectional differences (some months are crazy, some chill), and  
+  - seasonality / market-wide shocks.  
+
+- The FE regression is like a **seasonality-adjusted correlation**:
+  - Within each month, it looks at **which HQ counties got brighter/dimmer**  
+  - and asks whether those firms had systematically different **next-month returns**.
+"""
 )
 
-line = (
-    alt.Chart(df_plot)
-    .mark_line(color="red")
-    .transform_regression("x_tilde", "y_tilde")
-    .encode(x="x_tilde", y="y_tilde")
-)
+# --- Optional: show a few month fixed effects ---
 
-st.altair_chart(alt.layer(scatter, line), use_container_width=True)
+show_fe = st.checkbox("Show a few month fixed effects (γ_month)", value=False)
 
-st.caption(
-    "The coefficient above measures how much *within-month* differences in ΔBrightness "
-    "across HQ counties are associated with *within-month* differences in next-month returns. "
-    "Because we control for month fixed effects, this removes seasonality."
-)
+if show_fe:
+    fe_params = results.params[[c for c in results.params.index if c.startswith("ym_")]]
+    fe_df = (
+        fe_params.rename_axis("month_dummy")
+        .reset_index(name="Coef.")
+        .sort_values("Coef.")
+    )
+    st.markdown("#### Example month fixed effects (relative to base month)")
+    st.dataframe(fe_df.head(10), use_container_width=True)
