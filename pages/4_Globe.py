@@ -4,8 +4,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
-
-from src.load_data import load_lights_monthly_by_coord
+from pathlib import Path
 
 st.set_page_config(
     page_title="Night Lights Anomalia Dashboard",
@@ -32,24 +31,43 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# ------------------ LOCAL LOADER ------------------
+
+
+def load_lights_monthly_by_coord_local() -> pd.DataFrame:
+    """Load county-level night-lights directly from CSV, no src.load_data dependency."""
+    path = Path("data/intermediate/lights_monthly_by_coord.csv")
+    if not path.exists():
+        st.error(
+            "data/intermediate/lights_monthly_by_coord.csv not found.\n\n"
+            "Run `python scripts/build_all.py` locally / in Codespaces, "
+            "commit that CSV, and push."
+        )
+        st.stop()
+    try:
+        df = pd.read_csv(path)
+    except Exception as e:
+        st.error(f"Error reading {path}: {e}")
+        st.stop()
+    return df
+
+
 # ------------------ LOAD COUNTY LIGHTS ------------------
 
-lights = load_lights_monthly_by_coord(fallback_if_missing=True)
+lights = load_lights_monthly_by_coord_local()
 if lights.empty:
-    st.error(
-        "lights_monthly_by_coord.csv is missing or empty.\n\n"
-        "Run `python scripts/build_all.py` and commit "
-        "`data/intermediate/lights_monthly_by_coord.csv`."
-    )
+    st.error("lights_monthly_by_coord.csv is empty.")
     st.stop()
 
 lights = lights.copy()
 lights.columns = [c.strip().lower() for c in lights.columns]
 
 required = {"iso", "date", "avg_rad_month"}
-if not required.issubset(lights.columns):
+missing = required - set(lights.columns)
+if missing:
     st.error(
         f"lights_monthly_by_coord.csv must have columns {required}.\n"
+        f"Missing: {missing}\n"
         f"Found: {lights.columns.tolist()}"
     )
     st.stop()
@@ -75,9 +93,13 @@ if lat_col is None or lon_col is None:
     st.stop()
 
 # Clean and restrict to USA
-lights = lights[lights["iso"].str.upper() == "USA"].copy()
+lights = lights[lights["iso"].astype(str).str.upper() == "USA"].copy()
 lights["date"] = pd.to_datetime(lights["date"], errors="coerce")
 lights = lights.dropna(subset=["date", lat_col, lon_col, "avg_rad_month"])
+
+if lights.empty:
+    st.error("No valid USA rows with date/lat/lon/avg_rad_month.")
+    st.stop()
 
 lights["year_month"] = lights["date"].dt.to_period("M").astype(str)
 
@@ -178,7 +200,6 @@ st.caption(
     "Globe uses VIIRS county-level night-lights (avg_rad_month) for the U.S. "
     "Color and size both scale with brightness. Drag to rotate."
 )
-
 
 
 
