@@ -1,0 +1,488 @@
+ticker,firm,state,hq_lat,hq_lon,state_name,state_code,county_name,county_fips
+MMM,3M,MN,44.9497487,-93.0931028,Minnesota,MN,Ramsey County,27123
+AOS,A. O. Smith,WI,43.0386475,-87.9090751,Wisconsin,WI,Milwaukee County,55079
+ABT,Abbott Laboratories,WI,42.327724,-87.8394189,Illinois,IL,Lake County,17097
+ABBV,AbbVie,WI,42.327724,-87.8394189,Illinois,IL,Lake County,17097
+ACN,Accenture,KY,38.4168505,-86.9969385,Indiana,IN,Dubois County,18037
+ADBE,Adobe Inc.,CA,37.3361663,-121.890591,California,CA,Santa Clara County,06085
+AMD,Advanced Micro Devices,CA,37.3541132,-121.955174,California,CA,Santa Clara County,06085
+AES,AES Corporation,DC,38.8769326,-77.0893094,Virginia,VA,Arlington County,51013
+AFL,Aflac,AL,32.4610708,-84.9880449,Georgia,GA,Muscogee County,13215
+A,Agilent Technologies,CA,37.3541132,-121.955174,California,CA,Santa Clara County,06085
+APD,Air Products,NJ,40.5735876,-75.614631,Pennsylvania,PA,Lehigh County,42077
+ABNB,Airbnb,CA,37.7932754,-122.3963589,California,CA,San Francisco County,06075
+AKAM,Akamai Technologies,MA,42.3656347,-71.1040018,Massachusetts,MA,Middlesex County,25017
+ALB,Albemarle Corporation,SC,35.2272086,-80.8430827,North Carolina,NC,Mecklenburg County,37119
+ARE,Alexandria Real Estate Equities,CA,34.1476507,-118.144155,California,CA,Los Angeles County,06037
+ALGN,Align Technology,AZ,33.4255117,-111.940016,Arizona,AZ,Maricopa County,04013
+ALLE,Allegion,KY,38.4168505,-86.9969385,Indiana,IN,Dubois County,18037
+LNT,Alliant Energy,WI,43.07469,-89.3841663,Wisconsin,WI,Dane County,55025
+ALL,Allstate,WI,42.128704,-87.8265089,Illinois,IL,Cook County,17031
+GOOGL,Alphabet Inc. (Class A),CA,37.3893889,-122.0832101,California,CA,Santa Clara County,06085
+GOOG,Alphabet Inc. (Class C),CA,37.3893889,-122.0832101,California,CA,Santa Clara County,06085
+MO,Altria,VA,37.5385087,-77.43428,Virginia,VA,Richmond city,51760
+AMZN,Amazon,WA,47.6038321,-122.330062,Washington,WA,King County,53033
+AEE,Ameren,MO,38.6280278,-90.1910154,Missouri,MO,St. Louis city,29510
+AEP,American Electric Power,OH,39.9622601,-83.0007065,Ohio,OH,Franklin County,39049
+AXP,American Express,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+AIG,American International Group,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+AMT,American Tower,MA,42.3554334,-71.060511,Massachusetts,MA,Suffolk County,25025
+AWK,American Water Works,NJ,39.9448402,-75.1198911,New Jersey,NJ,Camden County,34007
+AMP,Ameriprise Financial,MN,44.9772995,-93.2654692,Minnesota,MN,Hennepin County,27053
+AME,Ametek,NJ,40.0448306,-75.4388053,Pennsylvania,PA,Chester County,42029
+AMGN,Amgen,CA,34.1705609,-118.8375937,California,CA,Ventura County,06111
+APH,Amphenol,CT,41.4564233,-72.8239356,Connecticut,CT,New Haven County,09009
+ADI,Analog Devices,MA,42.5464828,-71.1736669,Massachusetts,MA,Middlesex County,25017
+APA,APA Corporation,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+APO,Apollo Global Management,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+AAPL,Apple Inc.,CA,37.3228934,-122.0322895,California,CA,Santa Clara County,06085
+AMAT,Applied Materials,CA,37.3541132,-121.955174,California,CA,Santa Clara County,06085
+APTV,Aptiv,KY,38.4168505,-86.9969385,Indiana,IN,Dubois County,18037
+ACGL,Arch Capital Group,NC,35.9983557,-80.4341153,North Carolina,NC,Davie County,37059
+ADM,Archer Daniels Midland,IL,41.8755616,-87.6244212,Illinois,IL,Cook County,17031
+ANET,Arista Networks,CA,37.3541132,-121.955174,California,CA,Santa Clara County,06085
+AJG,Arthur J. Gallagher & Co.,IL,42.0841936,-88.0131275,Illinois,IL,Cook County,17031
+AIZ,Assurant,GA,33.7544657,-84.3898151,Georgia,GA,Fulton County,13121
+T,AT&T,TX,32.7762719,-96.7968559,Texas,TX,Dallas County,48113
+ATO,Atmos Energy,TX,32.7762719,-96.7968559,Texas,TX,Dallas County,48113
+ADSK,Autodesk,CA,37.7932754,-122.3963589,California,CA,San Francisco County,06075
+ADP,Automatic Data Processing,NJ,40.8206555,-74.2937595,New Jersey,NJ,Essex County,34013
+AZO,AutoZone,AR,35.1460249,-90.0517638,Tennessee,TN,Shelby County,47157
+AVB,AvalonBay Communities,DC,38.8769326,-77.0893094,Virginia,VA,Arlington County,51013
+AVY,Avery Dennison,OH,41.6664781,-81.3399769,Ohio,OH,Lake County,39085
+AXON,Axon Enterprise,AZ,33.4942189,-111.926018,Arizona,AZ,Maricopa County,04013
+BKR,Baker Hughes,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+BALL,Ball Corporation,CO,39.9403995,-105.05208,Colorado,CO,Broomfield County,08014
+BAC,Bank of America,SC,35.2272086,-80.8430827,North Carolina,NC,Mecklenburg County,37119
+BAX,Baxter International,WI,42.1711365,-87.8445119,Illinois,IL,Lake County,17097
+BDX,Becton Dickinson,NJ,41.0167639,-74.2057012,New Jersey,NJ,Bergen County,34003
+BRK.B,Berkshire Hathaway,IA,41.2587459,-95.9383758,Nebraska,NE,Douglas County,31055
+BBY,Best Buy,MN,44.8766431,-93.2877877,Minnesota,MN,Hennepin County,27053
+TECH,Bio-Techne,MN,44.9772995,-93.2654692,Minnesota,MN,Hennepin County,27053
+BIIB,Biogen,MA,42.3656347,-71.1040018,Massachusetts,MA,Middlesex County,25017
+BLK,BlackRock,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+BX,Blackstone Inc.,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+XYZ,"Block, Inc.",TX,32.2527963,-101.4752803,Texas,TX,Howard County,48227
+BK,BNY Mellon,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+BA,Boeing,DC,38.8769326,-77.0893094,Virginia,VA,Arlington County,51013
+BKNG,Booking Holdings,CT,41.1175966,-73.4078968,Connecticut,CT,Fairfield County,09001
+BSX,Boston Scientific,MA,42.3468589,-71.5525188,Massachusetts,MA,Middlesex County,25017
+BMY,Bristol Myers Squibb,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+AVGO,Broadcom,CA,37.4443293,-122.1598465,California,CA,Santa Clara County,06085
+BR,Broadridge Financial Solutions,NJ,40.7706572,-73.7176312,New York,NY,Nassau County,36059
+BRO,Brown & Brown,FL,29.2108147,-81.0228331,Florida,FL,Volusia County,12127
+BF.B,Brown–Forman,KY,38.2542376,-85.759407,Kentucky,KY,Jefferson County,21111
+BLDR,Builders FirstSource,TX,32.8295183,-96.9442177,Texas,TX,Dallas County,48113
+BG,Bunge Global,MO,38.661953,-90.5643258,Missouri,MO,St. Louis County,29189
+BXP,"BXP, Inc.",MA,42.3554334,-71.060511,Massachusetts,MA,Suffolk County,25025
+CHRW,C.H. Robinson,MN,44.8546856,-93.470786,Minnesota,MN,Hennepin County,27053
+CDNS,Cadence Design Systems,CA,37.3361663,-121.890591,California,CA,Santa Clara County,06085
+CZR,Caesars Entertainment,NV,39.5261788,-119.812658,Nevada,NV,Washoe County,32031
+CPT,Camden Property Trust,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+CPB,Campbell's Company (The),NJ,39.9448402,-75.1198911,New Jersey,NJ,Camden County,34007
+COF,Capital One,DC,38.9191272,-77.2229636,Virginia,VA,Fairfax County,51059
+CAH,Cardinal Health,OH,40.0996009,-83.1135563,Ohio,OH,Franklin County,39049
+KMX,CarMax,VA,37.5385087,-77.43428,Virginia,VA,Richmond city,51760
+CCL,Carnival,FL,25.7741566,-80.1935973,Florida,FL,Miami-Dade County,12086
+CARR,Carrier Global,FL,26.8233946,-80.1386547,Florida,FL,Palm Beach County,12099
+CAT,Caterpillar Inc.,TX,32.8295183,-96.9442177,Texas,TX,Dallas County,48113
+CBOE,Cboe Global Markets,IL,41.8755616,-87.6244212,Illinois,IL,Cook County,17031
+CBRE,CBRE Group,TX,32.7762719,-96.7968559,Texas,TX,Dallas County,48113
+CDW,CDW Corporation,WI,42.2373152,-87.9649487,Illinois,IL,Lake County,17097
+COR,Cencora,NJ,40.0792766,-75.3015714,Pennsylvania,PA,Montgomery County,42091
+CNC,Centene Corporation,MO,38.6280278,-90.1910154,Missouri,MO,St. Louis city,29510
+CNP,CenterPoint Energy,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+CF,CF Industries,WI,42.1711365,-87.8445119,Illinois,IL,Lake County,17097
+CRL,Charles River Laboratories,MA,42.5464828,-71.1736669,Massachusetts,MA,Middlesex County,25017
+SCHW,Charles Schwab Corporation,OK,32.991226,-97.1943701,Texas,TX,Denton County,48121
+CHTR,Charter Communications,CT,41.0534302,-73.5387341,Connecticut,CT,Fairfield County,09001
+CVX,Chevron Corporation,CA,37.7648021,-121.9544387,California,CA,Contra Costa County,06013
+CMG,Chipotle Mexican Grill,CA,33.6170092,-117.9294401,California,CA,Orange County,06059
+CHD,Church & Dwight,NJ,40.2688105,-74.8006895,New Jersey,NJ,Mercer County,34021
+CI,Cigna,CT,41.8313002,-72.7370265,Connecticut,CT,Hartford County,09003
+CINF,Cincinnati Financial,OH,39.7886111,-82.6418883,Ohio,OH,Fairfield County,39045
+CTAS,Cintas,OH,39.3600586,-84.309939,Ohio,OH,Warren County,39165
+CSCO,Cisco,CA,37.3361663,-121.890591,California,CA,Santa Clara County,06085
+C,Citigroup,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+CFG,Citizens Financial Group,RI,41.8239891,-71.4128343,Rhode Island,RI,Providence County,44007
+CLX,Clorox,CA,37.8044557,-122.271356,California,CA,Alameda County,06001
+CME,CME Group,IL,41.8755616,-87.6244212,Illinois,IL,Cook County,17031
+CMS,CMS Energy,IN,42.2416466,-84.425589,Michigan,MI,Jackson County,26075
+KO,Coca-Cola Company (The),GA,33.7544657,-84.3898151,Georgia,GA,Fulton County,13121
+CTSH,Cognizant,NJ,40.8860164,-74.0072568,New Jersey,NJ,Bergen County,34003
+COIN,Coinbase,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+CL,Colgate-Palmolive,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+CMCSA,Comcast,NJ,39.9527237,-75.1635262,Pennsylvania,PA,Philadelphia County,42101
+CAG,Conagra Brands,IL,41.8755616,-87.6244212,Illinois,IL,Cook County,17031
+COP,ConocoPhillips,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+STZ,Constellation Brands,PA,43.157285,-77.615214,New York,NY,Monroe County,36055
+CEG,Constellation Energy,MD,39.2908816,-76.610759,Maryland,MD,Baltimore city,24510
+COO,Cooper Companies (The),CA,37.7648021,-121.9544387,California,CA,Contra Costa County,06013
+CPRT,Copart,TX,32.7762719,-96.7968559,Texas,TX,Dallas County,48113
+GLW,Corning Inc.,PA,42.1435257,-77.0543408,New York,NY,Steuben County,36101
+CPAY,Corpay,GA,33.7544657,-84.3898151,Georgia,GA,Fulton County,13121
+CTVA,Corteva,IN,39.7683331,-86.1583502,Indiana,IN,Marion County,18097
+CSGP,CoStar Group,DC,38.8950368,-77.0365427,District of Columbia,DC,District of Columbia,11001
+COST,Costco,WA,47.5348778,-122.043297,Washington,WA,King County,53033
+CTRA,Coterra,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+CRWD,CrowdStrike,TX,30.2711286,-97.7436995,Texas,TX,Travis County,48453
+CCI,Crown Castle,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+CSX,CSX Corporation,GA,30.3321838,-81.655651,Florida,FL,Duval County,12031
+CMI,Cummins,IN,39.2014405,-85.9213796,Indiana,IN,Bartholomew County,18005
+CVS,CVS Health,MA,42.0028761,-71.5147839,Rhode Island,RI,Providence County,44007
+DHR,Danaher Corporation,DC,38.8950368,-77.0365427,District of Columbia,DC,District of Columbia,11001
+DRI,Darden Restaurants,FL,28.5421218,-81.379045,Florida,FL,Orange County,12095
+DDOG,Datadog,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+DVA,DaVita,CO,39.7392364,-104.984862,Colorado,CO,Denver County,08031
+DAY,Dayforce,MN,44.9772995,-93.2654692,Minnesota,MN,Hennepin County,27053
+DECK,Deckers Brands,CA,34.4358295,-119.8276389,California,CA,Santa Barbara County,06083
+DE,Deere & Company,IL,41.5058344,-90.5136642,Illinois,IL,Rock Island County,17161
+DELL,Dell Technologies,TX,30.5085915,-97.6788056,Texas,TX,Williamson County,48491
+DAL,Delta Air Lines,GA,33.7544657,-84.3898151,Georgia,GA,Fulton County,13121
+DVN,Devon Energy,OK,35.4729886,-97.5170536,Oklahoma,OK,Oklahoma County,40109
+DXCM,Dexcom,CA,32.7174202,-117.162772,California,CA,San Diego County,06073
+FANG,Diamondback Energy,TX,31.83688,-102.0103767,Texas,TX,Midland County,48329
+DG,Dollar General,TN,36.3231067,-86.7133302,Tennessee,TN,Davidson County,47037
+DLTR,Dollar Tree,VA,36.7168315,-76.2494453,Virginia,VA,Chesapeake city,51550
+D,Dominion Energy,VA,37.5385087,-77.43428,Virginia,VA,Richmond city,51760
+DASH,DoorDash,CA,37.7932754,-122.3963589,California,CA,San Francisco County,06075
+DOV,Dover Corporation,IL,41.7936822,-88.0102281,Illinois,IL,DuPage County,17043
+DHI,D. R. Horton,TX,32.7355816,-97.1071186,Texas,TX,Tarrant County,48439
+DTE,DTE Energy,OH,42.3315509,-83.0466403,Michigan,MI,Wayne County,26163
+DUK,Duke Energy,SC,35.2272086,-80.8430827,North Carolina,NC,Mecklenburg County,37119
+EMN,Eastman Chemical Company,KY,36.550238,-82.5594293,Tennessee,TN,Sullivan County,47163
+ETN,Eaton Corporation,KY,38.4168505,-86.9969385,Indiana,IN,Dubois County,18037
+EBAY,eBay Inc.,CA,37.3361663,-121.890591,California,CA,Santa Clara County,06085
+ECL,Ecolab,MN,44.9497487,-93.0931028,Minnesota,MN,Ramsey County,27123
+EIX,Edison International,CA,34.0676169,-118.0879763,California,CA,Los Angeles County,06037
+EW,Edwards Lifesciences,CA,33.6856969,-117.825981,California,CA,Orange County,06059
+ELV,Elevance Health,IN,39.7683331,-86.1583502,Indiana,IN,Marion County,18097
+EMR,Emerson Electric,MO,38.744707,-90.3038975,Missouri,MO,St. Louis County,29189
+ENPH,Enphase Energy,CA,37.5482697,-121.988571,California,CA,Alameda County,06001
+ETR,Entergy,LA,29.9559145,-90.0730259,Louisiana,LA,Orleans Parish,22071
+EOG,EOG Resources,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+EPAM,EPAM Systems,NJ,40.2294046,-74.9365329,Pennsylvania,PA,Bucks County,42017
+EQT,EQT Corporation,WV,40.4416941,-79.9900861,Pennsylvania,PA,Allegheny County,42003
+EFX,Equifax,GA,33.7544657,-84.3898151,Georgia,GA,Fulton County,13121
+EQIX,Equinix,CA,37.4863239,-122.232523,California,CA,San Mateo County,06081
+EQR,Equity Residential,IL,41.8755616,-87.6244212,Illinois,IL,Cook County,17031
+ERIE,Erie Indemnity,PA,42.1294712,-80.0852695,Pennsylvania,PA,Erie County,42049
+ESS,Essex Property Trust,CA,37.496904,-122.3330573,California,CA,San Mateo County,06081
+EL,Estée Lauder Companies (The),NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+EG,Everest Group,NC,35.9983557,-80.4341153,North Carolina,NC,Davie County,37059
+EVRG,Evergy,MO,39.100105,-94.5781416,Missouri,MO,Jackson County,29095
+ES,Eversource Energy,CT,41.764582,-72.6908547,Connecticut,CT,Hartford County,09003
+EXC,Exelon,IL,41.8755616,-87.6244212,Illinois,IL,Cook County,17031
+EXE,Expand Energy,OK,35.4729886,-97.5170536,Oklahoma,OK,Oklahoma County,40109
+EXPE,Expedia Group,WA,47.6038321,-122.330062,Washington,WA,King County,53033
+EXPD,Expeditors International,WA,47.6038321,-122.330062,Washington,WA,King County,53033
+EXR,Extra Space Storage,UT,40.7596198,-111.886797,Utah,UT,Salt Lake County,49035
+XOM,ExxonMobil,TX,32.8295183,-96.9442177,Texas,TX,Dallas County,48113
+FFIV,"F5, Inc.",WA,47.6038321,-122.330062,Washington,WA,King County,53033
+FDS,FactSet,CT,41.1175966,-73.4078968,Connecticut,CT,Fairfield County,09001
+FICO,Fair Isaac,MT,45.6794293,-111.044047,Montana,MT,Gallatin County,30031
+FAST,Fastenal,WI,44.0500054,-91.6392294,Minnesota,MN,Winona County,27169
+FRT,Federal Realty Investment Trust,DC,39.0817985,-77.1516844,Maryland,MD,Montgomery County,24031
+FDX,FedEx,AR,35.1460249,-90.0517638,Tennessee,TN,Shelby County,47157
+FIS,Fidelity National Information Services,GA,30.3321838,-81.655651,Florida,FL,Duval County,12031
+FITB,Fifth Third Bancorp,KY,39.1014537,-84.5124602,Ohio,OH,Hamilton County,39061
+FSLR,First Solar,AZ,33.4255117,-111.940016,Arizona,AZ,Maricopa County,04013
+FE,FirstEnergy,OH,41.083064,-81.518485,Ohio,OH,Summit County,39153
+FI,Fiserv,WI,43.0615578,-88.1260678,Wisconsin,WI,Waukesha County,55133
+F,Ford Motor Company,OH,42.3222599,-83.1763145,Michigan,MI,Wayne County,26163
+FTNT,Fortinet,CA,37.3688301,-122.036349,California,CA,Santa Clara County,06085
+FTV,Fortive,WA,47.9793437,-122.2127011,Washington,WA,Snohomish County,53061
+FOXA,Fox Corporation (Class A),NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+FOX,Fox Corporation (Class B),NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+BEN,Franklin Resources,CA,37.496904,-122.3330573,California,CA,San Mateo County,06081
+FCX,Freeport-McMoRan,AZ,33.4484367,-112.074141,Arizona,AZ,Maricopa County,04013
+IT,Gartner,CT,41.0534302,-73.5387341,Connecticut,CT,Fairfield County,09001
+GE,GE Aerospace,KY,39.2561691,-84.417997,Ohio,OH,Hamilton County,39061
+GEHC,GE HealthCare,IL,41.8755616,-87.6244212,Illinois,IL,Cook County,17031
+GEV,GE Vernova,MA,42.3656347,-71.1040018,Massachusetts,MA,Middlesex County,25017
+GEN,Gen Digital,AZ,33.4255117,-111.940016,Arizona,AZ,Maricopa County,04013
+GNRC,Generac,WI,43.0622536,-88.3123889,Wisconsin,WI,Waukesha County,55133
+GD,General Dynamics,DC,38.882334,-77.1710914,Virginia,VA,Falls Church city,51610
+GIS,General Mills,MN,44.9861176,-93.3784618,Minnesota,MN,Hennepin County,27053
+GM,General Motors,OH,42.3315509,-83.0466403,Michigan,MI,Wayne County,26163
+GPC,Genuine Parts Company,GA,33.7544657,-84.3898151,Georgia,GA,Fulton County,13121
+GILD,Gilead Sciences,CA,37.5600336,-122.2688522,California,CA,San Mateo County,06081
+GPN,Global Payments,GA,33.7544657,-84.3898151,Georgia,GA,Fulton County,13121
+GL,Globe Life,OK,33.1976496,-96.6154471,Texas,TX,Collin County,48085
+GDDY,GoDaddy,AZ,33.4255117,-111.940016,Arizona,AZ,Maricopa County,04013
+GS,Goldman Sachs,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+HAL,Halliburton,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+HIG,Hartford (The),CT,41.764582,-72.6908547,Connecticut,CT,Hartford County,09003
+HAS,Hasbro,RI,41.8789531,-71.3821203,Rhode Island,RI,Providence County,44007
+HCA,HCA Healthcare,TN,36.1622767,-86.7742984,Tennessee,TN,Davidson County,47037
+DOC,Healthpeak Properties,CO,39.7392364,-104.984862,Colorado,CO,Denver County,08031
+HSIC,Henry Schein,CT,40.7835914,-73.4075575,New York,NY,Suffolk County,36103
+HSY,Hershey Company (The),PA,40.2850285,-76.6534662,Pennsylvania,PA,Dauphin County,42043
+HPE,Hewlett Packard Enterprise,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+HLT,Hilton Worldwide,DC,38.9191272,-77.2229636,Virginia,VA,Fairfax County,51059
+HOLX,Hologic,MA,42.3468589,-71.5525188,Massachusetts,MA,Middlesex County,25017
+HD,Home Depot (The),GA,33.7544657,-84.3898151,Georgia,GA,Fulton County,13121
+HON,Honeywell,SC,35.2272086,-80.8430827,North Carolina,NC,Mecklenburg County,37119
+HRL,Hormel Foods,IA,43.6679992,-92.9746498,Minnesota,MN,Mower County,27099
+HST,Host Hotels & Resorts,DC,38.9812726,-77.1233587,Maryland,MD,Montgomery County,24031
+HWM,Howmet Aerospace,WV,40.4416941,-79.9900861,Pennsylvania,PA,Allegheny County,42003
+HPQ,HP Inc.,CA,37.4443293,-122.1598465,California,CA,Santa Clara County,06085
+HUBB,Hubbell Incorporated,CT,41.3546999,-73.1383092,Connecticut,CT,Fairfield County,09001
+HUM,Humana,KY,38.2542376,-85.759407,Kentucky,KY,Jefferson County,21111
+HBAN,Huntington Bancshares,OH,39.9622601,-83.0007065,Ohio,OH,Franklin County,39049
+HII,Huntington Ingalls Industries,VA,36.9775016,-76.42977,Virginia,VA,Newport News city,51700
+IBM,IBM,CT,41.132973,-73.7126064,New York,NY,Westchester County,36119
+IEX,IDEX Corporation,WI,42.2586461,-87.8407055,Illinois,IL,Lake County,17097
+IDXX,Idexx Laboratories,NH,43.6763036,-70.3663874,Maine,ME,Cumberland County,23005
+ITW,Illinois Tool Works,WI,42.0700662,-87.8114044,Illinois,IL,Cook County,17031
+INCY,Incyte,DE,39.7459468,-75.546589,Delaware,DE,New Castle County,10003
+IR,Ingersoll Rand,NC,35.7902384,-80.2115053,North Carolina,NC,Davidson County,37057
+PODD,Insulet Corporation,MA,42.4850931,-71.43284,Massachusetts,MA,Middlesex County,25017
+INTC,Intel,CA,37.3541132,-121.955174,California,CA,Santa Clara County,06085
+ICE,Intercontinental Exchange,GA,33.7544657,-84.3898151,Georgia,GA,Fulton County,13121
+IFF,International Flavors & Fragrances,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+IP,International Paper,AR,35.1460249,-90.0517638,Tennessee,TN,Shelby County,47157
+IPG,Interpublic Group of Companies (The),NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+INTU,Intuit,CA,37.3893889,-122.0832101,California,CA,Santa Clara County,06085
+ISRG,Intuitive Surgical,CA,37.3688301,-122.036349,California,CA,Santa Clara County,06085
+IVZ,Invesco,GA,33.7544657,-84.3898151,Georgia,GA,Fulton County,13121
+INVH,Invitation Homes,TX,32.7762719,-96.7968559,Texas,TX,Dallas County,48113
+IQV,IQVIA,NC,35.996653,-78.9018053,North Carolina,NC,Durham County,37063
+IRM,Iron Mountain,MA,42.3554334,-71.060511,Massachusetts,MA,Suffolk County,25025
+JBHT,J.B. Hunt,AR,36.2553543,-94.1307587,Arkansas,AR,Benton County,05007
+JBL,Jabil,FL,27.7712264,-82.6340259,Florida,FL,Pinellas County,12103
+JKHY,Jack Henry & Associates,MO,36.9289518,-93.9277149,Missouri,MO,Lawrence County,29109
+J,Jacobs Solutions,TX,32.7762719,-96.7968559,Texas,TX,Dallas County,48113
+JNJ,Johnson & Johnson,NJ,40.4951365,-74.4439254,New Jersey,NJ,Middlesex County,34023
+JPM,JPMorgan Chase,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+K,Kellanova,IL,41.8755616,-87.6244212,Illinois,IL,Cook County,17031
+KVUE,Kenvue,NJ,40.4234145,-74.7077882,New Jersey,NJ,Somerset County,34035
+KDP,Keurig Dr Pepper,MA,42.5048167,-71.1956111,Massachusetts,MA,Middlesex County,25017
+KEY,KeyCorp,OH,41.4996574,-81.6936772,Ohio,OH,Cuyahoga County,39035
+KEYS,Keysight Technologies,CA,38.4404925,-122.7141049,California,CA,Sonoma County,06097
+KMB,Kimberly-Clark,TX,32.8295183,-96.9442177,Texas,TX,Dallas County,48113
+KIM,Kimco Realty,CT,40.78743,-73.5434608,New York,NY,Nassau County,36059
+KMI,Kinder Morgan,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+KKR,KKR & Co.,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+KLAC,KLA Corporation,CA,37.4332273,-121.8989248,California,CA,Santa Clara County,06085
+KHC,Kraft Heinz,IL,41.8755616,-87.6244212,Illinois,IL,Cook County,17031
+KR,Kroger,KY,39.1014537,-84.5124602,Ohio,OH,Hamilton County,39061
+LHX,L3Harris,FL,28.0785034,-80.6077908,Florida,FL,Brevard County,12009
+LH,Labcorp,NC,36.0956918,-79.4377991,North Carolina,NC,Alamance County,37001
+LRCX,Lam Research,CA,37.5482697,-121.988571,California,CA,Alameda County,06001
+LW,Lamb Weston,ID,43.6954424,-116.3540138,Idaho,ID,Ada County,16001
+LVS,Las Vegas Sands,NV,36.1674263,-115.1484131,Nevada,NV,Clark County,32003
+LDOS,Leidos,DC,38.953282,-77.3464516,Virginia,VA,Fairfax County,51059
+LEN,Lennar,FL,25.7741566,-80.1935973,Florida,FL,Miami-Dade County,12086
+LII,Lennox International,OK,32.9481789,-96.7297206,Texas,TX,Dallas County,48113
+LLY,Lilly (Eli),IN,39.7683331,-86.1583502,Indiana,IN,Marion County,18097
+LYV,Live Nation Entertainment,CA,34.0696501,-118.3963062,California,CA,Los Angeles County,06037
+LKQ,LKQ Corporation,IL,41.8755616,-87.6244212,Illinois,IL,Cook County,17031
+LMT,Lockheed Martin,DC,38.9812726,-77.1233587,Maryland,MD,Montgomery County,24031
+L,Loews Corporation,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+LOW,Lowe's,NC,35.5848596,-80.8100724,North Carolina,NC,Iredell County,37097
+LULU,Lululemon Athletica,ND,46.838675,-100.7904921,North Dakota,ND,Burleigh County,38015
+LYB,LyondellBasell,,51.8879268,4.4906558,,,,
+MTB,M&T Bank,PA,42.8867166,-78.8783922,New York,NY,Erie County,36029
+MPC,Marathon Petroleum,OH,41.0413873,-83.6503982,Ohio,OH,Hancock County,39063
+MKTX,MarketAxess,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+MAR,Marriott International,DC,38.9812726,-77.1233587,Maryland,MD,Montgomery County,24031
+MMC,Marsh McLennan,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+MLM,Martin Marietta Materials,NC,35.7803977,-78.6390989,North Carolina,NC,Wake County,37183
+MAS,Masco,OH,42.36837,-83.3527097,Michigan,MI,Wayne County,26163
+MA,Mastercard,CT,40.9689871,-73.71263,New York,NY,Westchester County,36119
+MTCH,Match Group,TX,32.7762719,-96.7968559,Texas,TX,Dallas County,48113
+MKC,McCormick & Company,MD,39.4962709,-76.6542571,Maryland,MD,Baltimore County,24005
+MCD,McDonald's,IL,41.8755616,-87.6244212,Illinois,IL,Cook County,17031
+MCK,McKesson Corporation,TX,32.8295183,-96.9442177,Texas,TX,Dallas County,48113
+MDT,Medtronic,KY,38.4168505,-86.9969385,Indiana,IN,Dubois County,18037
+MRK,Merck & Co.,NJ,40.6771374,-74.2870715,New Jersey,NJ,Union County,34039
+META,Meta Platforms,CA,37.4519671,-122.177992,California,CA,San Mateo County,06081
+MET,MetLife,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+MTD,Mettler Toledo,OH,39.9622601,-83.0007065,Ohio,OH,Franklin County,39049
+MGM,MGM Resorts,NV,36.0724299,-115.1474759,Nevada,NV,Clark County,32003
+MCHP,Microchip Technology,AZ,33.3062031,-111.841185,Arizona,AZ,Maricopa County,04013
+MU,Micron Technology,ID,43.6166163,-116.200886,Idaho,ID,Ada County,16001
+MSFT,Microsoft,WA,47.6694141,-122.1238767,Washington,WA,King County,53033
+MAA,Mid-America Apartment Communities,AR,35.1460249,-90.0517638,Tennessee,TN,Shelby County,47157
+MRNA,Moderna,MA,42.3656347,-71.1040018,Massachusetts,MA,Middlesex County,25017
+MHK,Mohawk Industries,GA,31.5311784,-84.614328,Georgia,GA,Calhoun County,13037
+MOH,Molina Healthcare,CA,33.7690164,-118.191604,California,CA,Los Angeles County,06037
+TAP,Molson Coors Beverage Company,IL,41.8755616,-87.6244212,Illinois,IL,Cook County,17031
+MDLZ,Mondelez International,IL,41.8755616,-87.6244212,Illinois,IL,Cook County,17031
+MPWR,Monolithic Power Systems,WA,47.6765382,-122.2070775,Washington,WA,King County,53033
+MNST,Monster Beverage,CA,33.8752945,-117.566444,California,CA,Riverside County,06065
+MCO,Moody's Corporation,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+MS,Morgan Stanley,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+MOS,Mosaic Company (The),FL,27.9449854,-82.4583107,Florida,FL,Hillsborough County,12057
+MSI,Motorola Solutions,IL,41.8755616,-87.6244212,Illinois,IL,Cook County,17031
+MSCI,MSCI Inc.,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+NDAQ,"Nasdaq, Inc.",NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+NTAP,NetApp,CA,37.3361663,-121.890591,California,CA,Santa Clara County,06085
+NFLX,Netflix,CA,37.226611,-121.9746797,California,CA,Santa Clara County,06085
+NEM,Newmont,CO,39.7392364,-104.984862,Colorado,CO,Denver County,08031
+NWSA,News Corp (Class A),NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+NWS,News Corp (Class B),NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+NEE,NextEra Energy,FL,26.8815475,-80.0539253,Florida,FL,Palm Beach County,12099
+NKE,"Nike, Inc.",OR,45.5601883,-123.0587907,Oregon,OR,Washington County,41067
+NI,NiSource,IN,41.4828144,-87.3328139,Indiana,IN,Lake County,18089
+NDSN,Nordson Corporation,OH,41.4553232,-81.9179174,Ohio,OH,Cuyahoga County,39035
+NSC,Norfolk Southern,GA,33.7544657,-84.3898151,Georgia,GA,Fulton County,13121
+NTRS,Northern Trust,IL,41.8755616,-87.6244212,Illinois,IL,Cook County,17031
+NOC,Northrop Grumman,DC,38.8629185,-77.188257,Virginia,VA,Fairfax County,51059
+NCLH,Norwegian Cruise Line Holdings,FL,25.7741566,-80.1935973,Florida,FL,Miami-Dade County,12086
+NRG,NRG Energy,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+NUE,Nucor,SC,35.2272086,-80.8430827,North Carolina,NC,Mecklenburg County,37119
+NVDA,Nvidia,CA,37.3541132,-121.955174,California,CA,Santa Clara County,06085
+NVR,"NVR, Inc.",DC,38.953282,-77.3464516,Virginia,VA,Fairfax County,51059
+ORLY,O’Reilly Automotive,MO,37.2081729,-93.2922715,Missouri,MO,Greene County,29077
+OXY,Occidental Petroleum,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+ODFL,Old Dominion,NC,35.8831786,-80.081817,North Carolina,NC,Davidson County,37057
+OMC,Omnicom Group,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+ON,ON Semiconductor,AZ,33.4484367,-112.074141,Arizona,AZ,Maricopa County,04013
+OKE,Oneok,OK,36.1563122,-95.9927516,Oklahoma,OK,Tulsa County,40143
+ORCL,Oracle Corporation,TX,30.2711286,-97.7436995,Texas,TX,Travis County,48453
+OTIS,Otis Worldwide,CT,41.7198216,-72.8320435,Connecticut,CT,Hartford County,09003
+PCAR,Paccar,WA,47.6144219,-122.192337,Washington,WA,King County,53033
+PKG,Packaging Corporation of America,WI,42.2586461,-87.8407055,Illinois,IL,Lake County,17097
+PLTR,Palantir Technologies,CO,39.7392364,-104.984862,Colorado,CO,Denver County,08031
+PANW,Palo Alto Networks,CA,37.3541132,-121.955174,California,CA,Santa Clara County,06085
+PSKY,Paramount Skydance Corporation,CA,34.0536909,-118.242766,California,CA,Los Angeles County,06037
+PH,Parker Hannifin,OH,41.4996574,-81.6936772,Ohio,OH,Cuyahoga County,39035
+PAYX,Paychex,PA,43.1301133,-77.4759588,New York,NY,Monroe County,36055
+PAYC,Paycom,OK,35.4729886,-97.5170536,Oklahoma,OK,Oklahoma County,40109
+PYPL,PayPal,CA,37.3361663,-121.890591,California,CA,Santa Clara County,06085
+PEP,PepsiCo,CT,41.0409305,-73.7145746,New York,NY,Westchester County,36119
+PFE,Pfizer,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+PCG,PG&E Corporation,CA,37.8044557,-122.271356,California,CA,Alameda County,06001
+PM,Philip Morris International,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+PSX,Phillips 66,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+PNW,Pinnacle West Capital,AZ,33.4484367,-112.074141,Arizona,AZ,Maricopa County,04013
+PNC,PNC Financial Services,WV,40.4416941,-79.9900861,Pennsylvania,PA,Allegheny County,42003
+POOL,Pool Corporation,LA,30.4753525,-90.1010474,Louisiana,LA,St. Tammany Parish,22103
+PPG,PPG Industries,WV,40.4416941,-79.9900861,Pennsylvania,PA,Allegheny County,42003
+PPL,PPL Corporation,NJ,40.6022552,-75.4716115,Pennsylvania,PA,Lehigh County,42077
+PFG,Principal Financial Group,IA,41.5868654,-93.6249494,Iowa,IA,Polk County,19153
+PG,Procter & Gamble,KY,39.1014537,-84.5124602,Ohio,OH,Hamilton County,39061
+PGR,Progressive Corporation,OH,41.5595437,-81.4439274,Ohio,OH,Cuyahoga County,39035
+PLD,Prologis,CA,37.7932754,-122.3963589,California,CA,San Francisco County,06075
+PRU,Prudential Financial,NJ,40.735657,-74.1723667,New Jersey,NJ,Essex County,34013
+PEG,Public Service Enterprise Group,NJ,40.735657,-74.1723667,New Jersey,NJ,Essex County,34013
+PTC,PTC Inc.,MA,42.3554334,-71.060511,Massachusetts,MA,Suffolk County,25025
+PSA,Public Storage,CA,34.1469416,-118.2478471,California,CA,Los Angeles County,06037
+PHM,PulteGroup,GA,33.7544657,-84.3898151,Georgia,GA,Fulton County,13121
+PWR,Quanta Services,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+QCOM,Qualcomm,CA,32.7174202,-117.162772,California,CA,San Diego County,06073
+DGX,Quest Diagnostics,NJ,40.7899291,-74.0566735,New Jersey,NJ,Hudson County,34017
+RL,Ralph Lauren Corporation,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+RJF,Raymond James Financial,FL,27.7712264,-82.6340259,Florida,FL,Pinellas County,12103
+RTX,RTX Corporation,MA,42.3762385,-71.2355644,Massachusetts,MA,Middlesex County,25017
+O,Realty Income,CA,32.7174202,-117.162772,California,CA,San Diego County,06073
+REG,Regency Centers,GA,30.3321838,-81.655651,Florida,FL,Duval County,12031
+REGN,Regeneron Pharmaceuticals,CT,41.0762077,-73.8587461,New York,NY,Westchester County,36119
+RF,Regions Financial Corporation,AL,33.5206824,-86.8024326,Alabama,AL,Jefferson County,01073
+RSG,Republic Services,AZ,33.4484367,-112.074141,Arizona,AZ,Maricopa County,04013
+RMD,ResMed,CA,32.7174202,-117.162772,California,CA,San Diego County,06073
+RVTY,Revvity,MA,42.3762385,-71.2355644,Massachusetts,MA,Middlesex County,25017
+ROK,Rockwell Automation,WI,43.0386475,-87.9090751,Wisconsin,WI,Milwaukee County,55079
+ROL,"Rollins, Inc.",GA,33.7544657,-84.3898151,Georgia,GA,Fulton County,13121
+ROP,Roper Technologies,FL,27.3365805,-82.5308545,Florida,FL,Sarasota County,12115
+ROST,Ross Stores,CA,37.7021521,-121.9357918,California,CA,Alameda County,06001
+RCL,Royal Caribbean Group,FL,25.7741566,-80.1935973,Florida,FL,Miami-Dade County,12086
+SPGI,S&P Global,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+CRM,Salesforce,CA,37.7932754,-122.3963589,California,CA,San Francisco County,06075
+SBAC,SBA Communications,FL,26.3586885,-80.0830984,Florida,FL,Palm Beach County,12099
+SLB,Schlumberger,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+STX,Seagate Technology,KY,38.4168505,-86.9969385,Indiana,IN,Dubois County,18037
+SRE,Sempra,CA,32.7174202,-117.162772,California,CA,San Diego County,06073
+NOW,ServiceNow,CA,37.3541132,-121.955174,California,CA,Santa Clara County,06085
+SHW,Sherwin-Williams,OH,41.4996574,-81.6936772,Ohio,OH,Cuyahoga County,39035
+SPG,Simon Property Group,IN,39.7683331,-86.1583502,Indiana,IN,Marion County,18097
+SWKS,Skyworks Solutions,CA,33.6856969,-117.825981,California,CA,Orange County,06059
+SJM,J.M. Smucker Company (The),OH,40.8436664,-81.7640212,Ohio,OH,Wayne County,39169
+SW,Smurfit Westrock,KY,38.4168505,-86.9969385,Indiana,IN,Dubois County,18037
+SNA,Snap-on,WI,42.5846773,-87.8212263,Wisconsin,WI,Kenosha County,55059
+SOLV,Solventum,MN,44.9497487,-93.0931028,Minnesota,MN,Ramsey County,27123
+SO,Southern Company,GA,33.7544657,-84.3898151,Georgia,GA,Fulton County,13121
+LUV,Southwest Airlines,TX,32.7762719,-96.7968559,Texas,TX,Dallas County,48113
+SWK,Stanley Black & Decker,CT,41.6612104,-72.7795419,Connecticut,CT,Hartford County,09003
+SBUX,Starbucks,WA,47.6038321,-122.330062,Washington,WA,King County,53033
+STT,State Street Corporation,MA,42.3554334,-71.060511,Massachusetts,MA,Suffolk County,25025
+STLD,Steel Dynamics,IN,41.0799898,-85.1386015,Indiana,IN,Allen County,18003
+STE,Steris,KY,38.4168505,-86.9969385,Indiana,IN,Dubois County,18037
+SYK,Stryker Corporation,IN,42.291707,-85.5872286,Michigan,MI,Kalamazoo County,26077
+SMCI,Supermicro,CA,37.3361663,-121.890591,California,CA,Santa Clara County,06085
+SYF,Synchrony Financial,CT,41.0534302,-73.5387341,Connecticut,CT,Fairfield County,09001
+SNPS,Synopsys,CA,37.3688301,-122.036349,California,CA,Santa Clara County,06085
+SYY,Sysco,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+TMUS,T-Mobile US,WA,47.6144219,-122.192337,Washington,WA,King County,53033
+TROW,T. Rowe Price,MD,39.2908816,-76.610759,Maryland,MD,Baltimore city,24510
+TTWO,Take-Two Interactive,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+TPR,"Tapestry, Inc.",NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+TRGP,Targa Resources,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+TGT,Target Corporation,MN,44.9772995,-93.2654692,Minnesota,MN,Hennepin County,27053
+TDY,Teledyne Technologies,CA,34.1705609,-118.8375937,California,CA,Ventura County,06111
+TER,Teradyne,MA,42.5750939,-71.0786653,Massachusetts,MA,Middlesex County,25017
+TSLA,"Tesla, Inc.",TX,30.2711286,-97.7436995,Texas,TX,Travis County,48453
+TXN,Texas Instruments,TX,32.7762719,-96.7968559,Texas,TX,Dallas County,48113
+TPL,Texas Pacific Land Corporation,TX,32.7762719,-96.7968559,Texas,TX,Dallas County,48113
+TXT,Textron,RI,41.8239891,-71.4128343,Rhode Island,RI,Providence County,44007
+TMO,Thermo Fisher Scientific,MA,42.3762385,-71.2355644,Massachusetts,MA,Middlesex County,25017
+TJX,TJX Companies,MA,42.2773177,-71.4165905,Massachusetts,MA,Middlesex County,25017
+TKO,TKO Group Holdings,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+TTD,Trade Desk (The),CA,34.4458248,-119.0779359,California,CA,Ventura County,06111
+TSCO,Tractor Supply,TN,36.0325687,-86.7825235,Tennessee,TN,Williamson County,47187
+TT,Trane Technologies,KY,38.4168505,-86.9969385,Indiana,IN,Dubois County,18037
+TDG,TransDigm Group,OH,41.4996574,-81.6936772,Ohio,OH,Cuyahoga County,39035
+TRV,Travelers Companies (The),NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+TRMB,Trimble Inc.,CO,39.8366528,-105.0372046,Colorado,CO,Adams County,08001
+TFC,Truist Financial,SC,35.2272086,-80.8430827,North Carolina,NC,Mecklenburg County,37119
+TYL,Tyler Technologies,OK,33.0136764,-96.6925096,Texas,TX,Collin County,48085
+TSN,Tyson Foods,AR,36.1867442,-94.1288142,Arkansas,AR,Washington County,05143
+USB,U.S. Bancorp,MN,44.9772995,-93.2654692,Minnesota,MN,Hennepin County,27053
+UBER,Uber,CA,37.7932754,-122.3963589,California,CA,San Francisco County,06075
+UDR,"UDR, Inc.",CO,39.538565,-104.9725904,Colorado,CO,Douglas County,08035
+ULTA,Ulta Beauty,IL,41.7003302,-88.0717708,Illinois,IL,Will County,17197
+UNP,Union Pacific Corporation,IA,41.2587459,-95.9383758,Nebraska,NE,Douglas County,31055
+UAL,United Airlines Holdings,IL,41.8755616,-87.6244212,Illinois,IL,Cook County,17031
+UPS,United Parcel Service,GA,33.9242688,-84.3785379,Georgia,GA,Fulton County,13121
+URI,United Rentals,CT,41.0534302,-73.5387341,Connecticut,CT,Fairfield County,09001
+UNH,UnitedHealth Group,MN,44.9405086,-93.4638936,Minnesota,MN,Hennepin County,27053
+UHS,Universal Health Services,NJ,40.0947624,-75.3851334,Pennsylvania,PA,Montgomery County,42091
+VLO,Valero Energy,TX,29.4246002,-98.4951405,Texas,TX,Bexar County,48029
+VTR,Ventas,IL,41.8755616,-87.6244212,Illinois,IL,Cook County,17031
+VLTO,Veralto,MA,42.3762385,-71.2355644,Massachusetts,MA,Middlesex County,25017
+VRSN,Verisign,DC,38.9646244,-77.4463445,Virginia,VA,Loudoun County,51107
+VRSK,Verisk Analytics,NJ,40.7215682,-74.047455,New Jersey,NJ,Hudson County,34017
+VZ,Verizon,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+VRTX,Vertex Pharmaceuticals,MA,42.3554334,-71.060511,Massachusetts,MA,Suffolk County,25025
+VTRS,Viatris,WV,40.4416941,-79.9900861,Pennsylvania,PA,Allegheny County,42003
+VICI,Vici Properties,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+V,Visa Inc.,CA,37.7932754,-122.3963589,California,CA,San Francisco County,06075
+VST,Vistra Corp.,TX,32.8295183,-96.9442177,Texas,TX,Dallas County,48113
+VMC,Vulcan Materials Company,AL,33.5206824,-86.8024326,Alabama,AL,Jefferson County,01073
+WRB,W. R. Berkley Corporation,CT,41.0264862,-73.6284598,Connecticut,CT,Fairfield County,09001
+GWW,W. W. Grainger,WI,42.2586461,-87.8407055,Illinois,IL,Lake County,17097
+WAB,Wabtec,WV,40.4416941,-79.9900861,Pennsylvania,PA,Allegheny County,42003
+WBA,Walgreens Boots Alliance,WI,42.1711365,-87.8445119,Illinois,IL,Lake County,17097
+WMT,Walmart,AR,36.3728608,-94.208787,Arkansas,AR,Benton County,05007
+DIS,Walt Disney Company (The),CA,34.1812089,-118.307201,California,CA,Los Angeles County,06037
+WBD,Warner Bros. Discovery,NJ,40.7127281,-74.0060152,New York,NY,New York County,36061
+WM,Waste Management,LA,29.7589382,-95.3676974,Texas,TX,Harris County,48201
+WAT,Waters Corporation,MA,42.1428913,-71.5164618,Massachusetts,MA,Worcester County,25027
+WEC,WEC Energy Group,WI,43.0386475,-87.9090751,Wisconsin,WI,Milwaukee County,55079
+WFC,Wells Fargo,CA,37.7932754,-122.3963589,California,CA,San Francisco County,06075
+WELL,Welltower,OH,41.6529143,-83.5378173,Ohio,OH,Lucas County,39095
+WST,West Pharmaceutical Services,NJ,40.0299755,-75.6290456,Pennsylvania,PA,Chester County,42029
+WDC,Western Digital,CA,37.3361663,-121.890591,California,CA,Santa Clara County,06085
+WY,Weyerhaeuser,WA,47.6038321,-122.330062,Washington,WA,King County,53033
+WSM,"Williams-Sonoma, Inc.",CA,37.7932754,-122.3963589,California,CA,San Francisco County,06075
+WMB,Williams Companies,OK,36.1563122,-95.9927516,Oklahoma,OK,Tulsa County,40143
+WDAY,"Workday, Inc.",CA,37.6624312,-121.8746789,California,CA,Alameda County,06001
+WYNN,Wynn Resorts,NV,36.0724299,-115.1474759,Nevada,NV,Clark County,32003
+XEL,Xcel Energy,MN,44.9772995,-93.2654692,Minnesota,MN,Hennepin County,27053
+XYL,Xylem Inc.,CT,41.0339862,-73.7629097,New York,NY,Westchester County,36119
+YUM,Yum! Brands,KY,38.2542376,-85.759407,Kentucky,KY,Jefferson County,21111
+ZBRA,Zebra Technologies,WI,42.1900249,-87.9084039,Illinois,IL,Lake County,17097
+ZBH,Zimmer Biomet,IN,41.2381017,-85.8530544,Indiana,IN,Kosciusko County,18085
+ZTS,Zoetis,NJ,40.8578772,-74.4259866,New Jersey,NJ,Morris County,34027

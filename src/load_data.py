@@ -1,207 +1,129 @@
+# src/load_data.py
+
 import pandas as pd
 from pathlib import Path
 
-# ------------------------------------------------------------
-# Paths
-# ------------------------------------------------------------
 
-DATA_DIR = Path("data")
-RAW_DIR = DATA_DIR / "raw"
-INTERMEDIATE_DIR = DATA_DIR / "intermediate"
-FINAL_DIR = DATA_DIR / "final"
-
-# VIIRS nightlights Dropbox URL (dl=1 = direct CSV)
-LIGHTS_URL = (
-    "https://www.dropbox.com/scl/fi/dxmu3q12hf7ovs0cdmnuz/"
-    "VIIRS-nighttime-lights-2013m1to2024m5-level2.csv"
-    "?rlkey=803izc59yiow71sgscawc1q6v&st=c0fgh0qq&dl=1"
-)
+DATA_FINAL_PATH = Path("data/final/nightlights_model_data.csv")
 
 
-# ------------------------------------------------------------
-# 1. Raw nightlights (NO FILTERING HERE)
-# ------------------------------------------------------------
-
-def load_raw_lights() -> pd.DataFrame:
-    """
-    Load raw VIIRS level-2 nightlights from Dropbox.
-
-    - Does NOT trim to any year/month.
-    - Only fixes encoding / column names.
-    - Date trimming (e.g. 2018+) is done in preprocess_lights.py
-    """
-    print("📥 Loading raw nightlights data...")
-    try:
-        df = pd.read_csv(LIGHTS_URL, low_memory=False)
-    except UnicodeDecodeError:
-        print("⚠️ UTF-8 failed, retrying with latin1...")
-        try:
-            df = pd.read_csv(LIGHTS_URL, encoding="latin1", low_memory=False)
-        except UnicodeDecodeError:
-            print("⚠️ latin1 failed, retrying with ISO-8859-1 + skip bad lines...")
-            df = pd.read_csv(
-                LIGHTS_URL,
-                encoding="ISO-8859-1",
-                low_memory=False,
-                on_bad_lines="skip",
-            )
-
-    # normalize colnames
-    df.columns = [c.strip().lower() for c in df.columns]
-
-    expected = {"iso", "id_1", "name_1", "id_2", "name_2",
-                "year", "month", "nlsum", "area"}
-    missing = expected - set(df.columns)
-    if missing:
-        raise ValueError(
-            f"Raw lights data missing {missing}. "
-            f"Found: {df.columns.tolist()}"
-        )
-
-    df["year"] = pd.to_numeric(df["year"], errors="coerce")
-    df["month"] = pd.to_numeric(df["month"], errors="coerce")
-
-    print(
-        f"📅 Raw VIIRS years: {int(df['year'].min())} → {int(df['year'].max())}; "
-        f"months: {int(df['month'].min())} → {int(df['month'].max())}"
-    )
-    print(f"📏 Raw lights rows: {len(df):,}")
-
-    return df
-
-
-# ------------------------------------------------------------
-# 2. S&P500 firm info (raw & clean)
-# ------------------------------------------------------------
-
-def load_raw_sp500() -> pd.DataFrame:
-    """
-    Raw SP500 firm file used by older code.
-    We point this at sp500_clean.csv.
-    """
-    path = RAW_DIR / "sp500_clean.csv"
-    if not path.exists():
-        raise FileNotFoundError(f"Missing {path}. Upload sp500_clean.csv to data/raw/.")
-
+def _read_csv_lower(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path)
-    df.columns = [c.strip().lower() for c in df.columns]
+    df.columns = df.columns.str.lower()
     return df
 
-
-def load_sp500_clean() -> pd.DataFrame:
-    """
-    Clean SP500 firm locations with at least:
-        ['ticker','company','lat','lon']
-    'state' is optional.
-    """
-    df = load_raw_sp500()
-    expected = {"ticker", "company", "lat", "lon"}
-    missing = expected - set(df.columns)
-    if missing:
-        raise ValueError(
-            f"sp500_clean.csv missing {missing}. "
-            f"Found: {df.columns.tolist()}"
-        )
-    return df
-
-
-# ------------------------------------------------------------
-# 3. Raw monthly returns (from fetch_monthly_returns.py)
-# ------------------------------------------------------------
-
-def load_raw_returns() -> pd.DataFrame:
-    """
-    Load raw monthly returns CSV produced by scripts/fetch_monthly_returns.py.
-
-    Expected columns (lowercased): ['ticker', 'date', 'ret']
-    """
-    path = RAW_DIR / "sp500_monthly_returns.csv"
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Missing file: {path}\n"
-            "Run scripts/fetch_monthly_returns.py first."
-        )
-
-    df = pd.read_csv(path)
-    df.columns = [c.strip().lower() for c in df.columns]
-
-    if "date" in df.columns:
-        df["date"] = pd.to_datetime(df["date"], errors="coerce")
-
-    return df
-
-
-# ------------------------------------------------------------
-# 4. Processed nightlights panel (county-level with coords)
-# ------------------------------------------------------------
-
-def save_lights_monthly_by_coord(df: pd.DataFrame) -> None:
-    """
-    Helper for preprocess_lights to write the intermediate CSV.
-    """
-    INTERMEDIATE_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = INTERMEDIATE_DIR / "lights_monthly_by_coord.csv"
-    df.to_csv(out_path, index=False)
-    print(f"💾 Saved lights_monthly_by_coord.csv to {out_path}")
-
-
-def load_lights_monthly_by_coord(fallback_if_missing: bool = True) -> pd.DataFrame:
-    """
-    Load the processed lights panel (one row per region×month).
-
-    If fallback_if_missing=True and the file doesn't exist, try to
-    build it once using preprocess_lights.build_lights_monthly_by_coord().
-    """
-    path = INTERMEDIATE_DIR / "lights_monthly_by_coord.csv"
-    if not path.exists():
-        if not fallback_if_missing:
-            raise FileNotFoundError(
-                f"Missing {path}. Run scripts/build_all.py to create it."
-            )
-        # lazy build to support Streamlit first-run
-        print("⚙️ lights_monthly_by_coord.csv missing — building via preprocess_lights...")
-        from .preprocess_lights import build_lights_monthly_by_coord
-
-        df = build_lights_monthly_by_coord()
-    else:
-        df = pd.read_csv(path)
-
-    df.columns = [c.strip().lower() for c in df.columns]
-
-    if "date" in df.columns:
-        df["date"] = pd.to_datetime(df["date"], errors="coerce")
-
-    return df
-
-
-# ------------------------------------------------------------
-# 5. Final merged model dataset (nightlights + returns)
-# ------------------------------------------------------------
 
 def load_model_data(fallback_if_missing: bool = True) -> pd.DataFrame:
-    """
-    Load the final merged dataset used by the dashboard.
+    # Master loader for the final nightlights × returns dataset.
+    # Returns a DataFrame with at least:
+    #   ['ticker','date','brightness_change','ret','ret_fwd','ret_fwd_1m']
+    # plus any other columns already present in the CSV.
+    path = DATA_FINAL_PATH
 
-    If fallback_if_missing=True and the file doesn't exist, build it once
-    using features.build_features_and_model_data().
-    """
-    path = FINAL_DIR / "nightlights_model_data.csv"
     if not path.exists():
-        if not fallback_if_missing:
-            raise FileNotFoundError(
-                f"Missing final dataset at {path}. "
-                "Run scripts/build_all.py to generate it."
-            )
-        print("⚙️ nightlights_model_data.csv missing — building via features...")
-        from .features import build_features_and_model_data
+        if fallback_if_missing:
+            print(f"⚠️ WARNING: {path} not found. Returning empty DataFrame.")
+            return pd.DataFrame()
+        raise FileNotFoundError(
+            f"Final model dataset not found at {path}. "
+            "Make sure nightlights_model_data.csv is committed there."
+        )
 
-        df = build_features_and_model_data()
-    else:
-        df = pd.read_csv(path)
+    df = _read_csv_lower(path)
 
-    df.columns = [c.strip().lower() for c in df.columns]
+    # --- Date parsing ---
+    if "date" not in df.columns:
+        raise ValueError("nightlights_model_data.csv must have a 'date' column.")
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df.dropna(subset=["date"])
 
-    if "date" in df.columns:
-        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    # --- Ticker sanity ---
+    if "ticker" not in df.columns:
+        raise ValueError("nightlights_model_data.csv must have a 'ticker' column.")
 
+    # --- Brightness / light-change column standardization ---
+    brightness_candidates = [
+        "brightness_change",
+        "delta_brightness",
+        "d_brightness",
+        "dlight",
+        "dl",
+        "brightness_delta",
+    ]
+    found_brightness = None
+    for col in brightness_candidates:
+        if col in df.columns:
+            found_brightness = col
+            break
+
+    if found_brightness is None:
+        # Fall back to a level column if that's all we have
+        level_candidates = ["avg_rad_month", "brightness", "light", "rad"]
+        for col in level_candidates:
+            if col in df.columns:
+                found_brightness = col
+                break
+
+    if found_brightness is None:
+        raise ValueError(
+            "Could not find a brightness / brightness_change column in "
+            "nightlights_model_data.csv"
+        )
+
+    if found_brightness != "brightness_change":
+        df = df.rename(columns={found_brightness: "brightness_change"})
+
+    # --- Return columns ---
+    # Base monthly return
+    if "ret" not in df.columns:
+        # Try to infer from alternative names
+        ret_aliases = ["return", "returns", "ret_monthly", "monthly_return", "excess_ret"]
+        for col in ret_aliases:
+            if col in df.columns:
+                df = df.rename(columns={col: "ret"})
+                break
+
+    if "ret" not in df.columns:
+        raise ValueError(
+            "nightlights_model_data.csv must have a 'ret' (monthly return) column "
+            "or an alternative like 'return' / 'returns'."
+        )
+
+    # Forward 1-month return
+    if "ret_fwd_1m" not in df.columns and "ret_fwd" in df.columns:
+        df = df.rename(columns={"ret_fwd": "ret_fwd_1m"})
+
+    if "ret_fwd_1m" not in df.columns:
+        # Compute from ret if not supplied
+        df = df.sort_values(["ticker", "date"])
+        df["ret_fwd_1m"] = df.groupby("ticker")["ret"].shift(-1)
+
+    # Keep a 'ret_fwd' alias for backwards compatibility with existing pages
+    if "ret_fwd" not in df.columns:
+        df["ret_fwd"] = df["ret_fwd_1m"]
+
+    # --- Month-year key for fixed effects ---
+    df["ym"] = df["date"].dt.to_period("M")
+
+    return df
+
+
+def load_returns_standardized(fallback_if_missing: bool = True) -> pd.DataFrame:
+    # Convenience wrapper that returns just the standardized returns view:
+    #   ['ticker','date','ret','ret_fwd_1m']
+    # Sourced directly from the final model dataset.
+    df = load_model_data(fallback_if_missing=fallback_if_missing)
+    if df.empty:
+        return df
+
+    cols = ["ticker", "date", "ret", "ret_fwd_1m"]
+    cols_present = [c for c in cols if c in df.columns]
+    return df[cols_present].copy()
+
+
+def add_ym(df: pd.DataFrame) -> pd.DataFrame:
+    """Adds a YYYY-MM period column `ym` if missing."""
+    if "date" not in df.columns:
+        raise ValueError("add_ym expects a 'date' column.")
+    df["ym"] = df["date"].dt.to_period("M")
     return df
