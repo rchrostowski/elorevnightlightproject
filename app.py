@@ -10,6 +10,7 @@ st.set_page_config(
 
 st.markdown("## 🌌 Night Lights & Stock Returns – FIN 377 Project")
 
+# ---------- Load and clean data ----------
 df = load_model_data(fallback_if_missing=True)
 
 if df.empty:
@@ -23,12 +24,17 @@ df = df.copy()
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 df = df.dropna(subset=["date"])
 
-# Clean out junk counties (e.g. 'n/a')
+# Clean counties (some rows had county_name 'n/a' earlier)
 if "county_name" in df.columns:
     df["county_name"] = df["county_name"].astype(str)
     df = df[df["county_name"].str.lower() != "n/a"]
 
-# Basic sample stats
+# Core columns
+for col in ["brightness_change", "ret_fwd_1m"]:
+    if col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+# ---------- High-level summary ----------
 n_obs = len(df)
 n_tickers = df["ticker"].nunique() if "ticker" in df.columns else 0
 n_counties = df["county_name"].nunique() if "county_name" in df.columns else 0
@@ -50,11 +56,15 @@ with col4:
 
 st.markdown("---")
 
-st.markdown("### 🎯 Project goal (what this dashboard is actually testing)")
+# ---------- Project goal explanation ----------
+st.markdown("### 🎯 What this project is testing")
 
 st.markdown(
     r"""
-We test whether **changes in night-time light around firm headquarters** predict **next-month stock returns**:
+We test whether **changes in night-time light around firm headquarters** are informative about
+**next-month stock returns**.
+
+The core regression is:
 
 \[
 \text{ret\_{fwd, i,t}} = \alpha + \beta \cdot \Delta \text{Brightness}\_{i,t}
@@ -63,19 +73,25 @@ We test whether **changes in night-time light around firm headquarters** predict
 
 Where:
 
-- **`ret_fwd_1m`** (our dependent variable) is the **total next-month return** of ticker \(i\).  
-  - We use **total returns**, not market-excess or risk-free-excess returns (this is noted on the plots).
-- **`brightness_change`** is the **change in VIIRS night-lights** for the ticker’s HQ **county** from month \(t-1\) to \(t\).
-- \(\gamma_{\text{year-month}(t)}\) are **year–month fixed effects**:
-  - They compare **brighter vs darker HQ counties *within the same calendar month***.
-  - This removes **seasonality** and common macro shocks in that month.
+- **Dependent variable**: `ret_fwd_1m`  
+  - This is the **total next-month return** of ticker \(i\) (we are *not* subtracting the market or risk-free rate).
+- **Key regressor**: `brightness_change`  
+  - The **change in VIIRS night-lights** in the ticker’s **HQ county** from month \(t-1\) to \(t\).
+- **Fixed effects**: \(\gamma_{\text{year-month}(t)}\)  
+  - These are **year–month fixed effects**, implemented as `C(year-month)`.  
+  - They compare **brighter vs darker HQ counties *within the same calendar month***.  
+  - This removes **seasonality** and common macro shocks.
 
-The rest of the app is organized as:
+So, the coefficient **β on `brightness_change`** answers:
 
-1. **Overview** – high-level distribution of brightness and returns.  
-2. **Ticker Explorer** – zoom in on a single ticker: its HQ county’s lights vs its returns.  
-3. **County Explorer** – zoom in on a county: which firms sit there and how they behave.  
-4. **Globe** – interactive map of HQ counties and their light / return signals.  
-5. **Regression** – the main econometric result: \( \text{ret\_{fwd}} \sim \Delta \text{Brightness} + C(\text{year-month}) \).
+> “Holding the calendar month fixed, do firms in HQ counties that brighten more tend to have higher next-month returns?”
+
+The rest of the app is structured to support this story:
+
+1. **Overview** – what the sample looks like and how brightness/returns are distributed.  
+2. **Ticker Explorer** – for a single firm: how its HQ lights move vs its own returns.  
+3. **County Explorer** – for a single county: which firms sit there and how they behave.  
+4. **Globe** – interactive HQ map to visualize where the signals come from.  
+5. **Regression** – the main econometric test: `ret_fwd_1m ~ brightness_change + C(year-month)`.
 """
 )
