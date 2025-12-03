@@ -19,30 +19,44 @@ if not required.issubset(df.columns):
     st.error(f"`nightlights_model_data` must contain at least: {required}")
     st.stop()
 
-# Clean
+# --- Clean & ensure numeric ---
+
 df = df.copy()
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+# Force numeric for regression variables
+df["brightness_change"] = pd.to_numeric(df["brightness_change"], errors="coerce")
+df["ret_fwd_1m"] = pd.to_numeric(df["ret_fwd_1m"], errors="coerce")
+
+# Drop rows with missing anything we need
 df = df.dropna(subset=["date", "brightness_change", "ret_fwd_1m"])
+
+if df.empty:
+    st.error(
+        "No valid rows remaining after cleaning `date`, `brightness_change`, and `ret_fwd_1m`.\n"
+        "Check that these columns are present and numeric in `nightlights_model_data.csv`."
+    )
+    st.stop()
 
 # Explain what "ret" is
 st.markdown(
-    """
+    r"""
 We estimate the regression:
 
-\\[
-\\text{ret\_{fwd, i,t}} = \\alpha + \\beta \\cdot \\Delta \\text{Brightness}\_{i,t}
-+ \\gamma_{\\text{month}(t)} + \\varepsilon\_{i,t}
-\\]
+\[
+\text{ret\_{fwd, i,t}} = \alpha + \beta \cdot \Delta \text{Brightness}\_{i,t}
++ \gamma_{\text{month}(t)} + \varepsilon_{i,t}
+\]
 
-- **ret_fwd_1m** = ticker's **next-month total return** (not excess over the risk-free rate).  
-- **brightness_change** = change in VIIRS night-lights for the HQ county from month \\(t-1\\) to \\(t\\).  
-- \\(\\gamma_{\\text{month}(t)}\\) are **calendar month fixed effects** (C(year-month)), which:
+- **`ret_fwd_1m`** = ticker's **next-month total return** (not excess over the risk-free rate).  
+- **`brightness_change`** = change in VIIRS night-lights for the HQ county from month \(t-1\) to \(t\).  
+- \(\gamma_{\text{month}(t)}\) are **calendar month fixed effects** (C(year-month)), which:
   - compare **brighter vs darker counties *within the same calendar month***,
   - soak up seasonality, business-cycle effects, etc.
 """
 )
 
-# --- Raw correlation (no controls) ---
+# --- 1. Raw correlation (no controls) ---
 
 corr = df["brightness_change"].corr(df["ret_fwd_1m"])
 st.markdown("### 1. Raw correlation (no controls)")
@@ -52,30 +66,43 @@ with col1:
     st.metric("Corr(ΔBrightness, next-month return)", f"{corr:.3f}")
 with col2:
     st.caption(
-        "This is just the plain correlation across all ticker-months, with **no controls**.\n"
-        "The professor's FE regression is the 'seasonality-adjusted' version of this."
+        "This is the plain correlation across all ticker–months, with **no controls**.\n"
+        "The fixed-effects regression below is the 'seasonality-adjusted' version of this."
     )
 
 # --- 2. Fixed-effects regression: ret_fwd_1m ~ brightness_change + C(year-month) ---
 
 st.markdown("### 2. Fixed-effects regression (C(year-month))")
 
+# Year-month label for fixed effects
 df["ym"] = df["date"].dt.to_period("M").astype(str)
 
-# Build design matrix: brightness + month dummies
+# Month dummies (drop_first=True to avoid dummy trap)
 month_dummies = pd.get_dummies(df["ym"], prefix="ym", drop_first=True)
+
+# Design matrix: constant + brightness_change + month dummies
 X = pd.concat([df[["brightness_change"]], month_dummies], axis=1)
 X = sm.add_constant(X)
-y = df["ret_fwd_1m"]
 
-model = sm.OLS(y, X)
+# Ensure everything is float (statsmodels hates object dtype)
+X = X.astype(float)
+y = df["ret_fwd_1m"].astype(float)
+
+# Fit OLS
+model = sm.OLS(y.values, X.values)
 results = model.fit()
 
+# Rebuild param index using our column names
+params = pd.Series(results.params, index=X.columns)
+bse = pd.Series(results.bse, index=X.columns)
+tvals = pd.Series(results.tvalues, index=X.columns)
+pvals = pd.Series(results.pvalues, index=X.columns)
+
 # Extract main coefficient (brightness_change)
-beta = results.params.get("brightness_change", np.nan)
-se_beta = results.bse.get("brightness_change", np.nan)
-t_beta = results.tvalues.get("brightness_change", np.nan)
-p_beta = results.pvalues.get("brightness_change", np.nan)
+beta = params.get("brightness_change", np.nan)
+se_beta = bse.get("brightness_change", np.nan)
+t_beta = tvals.get("brightness_change", np.nan)
+p_beta = pvals.get("brightness_change", np.nan)
 
 coef_df = pd.DataFrame(
     {
@@ -103,33 +130,35 @@ with colB:
 
 Interpretation of **β (brightness_change)**:
 
-- Compares **counties that are relatively brighter vs darker *within the same year-month***  
-- If β > 0: brighter counties in a given month tend to have **higher next-month returns**  
-- If β < 0: brighter counties in a given month tend to have **lower next-month returns**
+- Compares **counties that are relatively brighter vs darker within the *same year-month***.  
+- If β > 0: brighter HQ counties in a given month tend to have **higher next-month returns**.  
+- If β < 0: brighter HQ counties in a given month tend to have **lower next-month returns**.
 """
     )
 
-# Optional: show a short FE vs no-FE comparison
+# --- 3. How this relates to simple correlation ---
+
 st.markdown("### 3. How this relates to correlation")
 
 st.markdown(
     """
-- The simple correlation above mixes together:
-  - cross-sectional differences (some months are crazy, some chill), and  
+- The simple correlation mixes together:
+  - cross-sectional differences across months, and  
   - seasonality / market-wide shocks.  
 
-- The FE regression is like a **seasonality-adjusted correlation**:
-  - Within each month, it looks at **which HQ counties got brighter/dimmer**  
-  - and asks whether those firms had systematically different **next-month returns**.
+- The fixed-effects regression is like a **seasonality-adjusted correlation**:
+  - Within each calendar month, it looks at **which HQ counties got brighter/dimmer**,  
+  - and asks whether those firms’ stocks had systematically different **next-month returns**.
 """
 )
 
-# --- Optional: show a few month fixed effects ---
+# --- Optional: show some month fixed effects ---
 
 show_fe = st.checkbox("Show a few month fixed effects (γ_month)", value=False)
 
 if show_fe:
-    fe_params = results.params[[c for c in results.params.index if c.startswith("ym_")]]
+    fe_mask = params.index.str.startswith("ym_")
+    fe_params = params[fe_mask]
     fe_df = (
         fe_params.rename_axis("month_dummy")
         .reset_index(name="Coef.")
