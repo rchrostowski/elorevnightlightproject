@@ -4,34 +4,48 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import altair as alt
-
-from src.load_data import load_lights_monthly_by_coord
+from pathlib import Path
 
 st.set_page_config(page_title="County Explorer", page_icon="🗺️")
 
 st.title("🗺️ County Night-Lights Explorer")
 
-lights = load_lights_monthly_by_coord(fallback_if_missing=True)
+
+def load_lights_monthly_by_coord_local() -> pd.DataFrame:
+    path = Path("data/intermediate/lights_monthly_by_coord.csv")
+    if not path.exists():
+        st.error(
+            "data/intermediate/lights_monthly_by_coord.csv not found.\n"
+            "Run `python scripts/build_all.py`, commit that CSV, and push."
+        )
+        st.stop()
+    try:
+        df = pd.read_csv(path)
+    except Exception as e:
+        st.error(f"Error reading {path}: {e}")
+        st.stop()
+    return df
+
+
+lights = load_lights_monthly_by_coord_local()
 if lights.empty:
-    st.error(
-        "lights_monthly_by_coord.csv is missing or empty.\n"
-        "Run `python scripts/build_all.py` and commit "
-        "`data/intermediate/lights_monthly_by_coord.csv`."
-    )
+    st.error("lights_monthly_by_coord.csv is empty.")
     st.stop()
 
 lights = lights.copy()
 lights.columns = [c.strip().lower() for c in lights.columns]
 
 required = {"iso", "date", "avg_rad_month"}
-if not required.issubset(lights.columns):
+missing = required - set(lights.columns)
+if missing:
     st.error(
         f"lights_monthly_by_coord.csv must have columns {required}.\n"
+        f"Missing: {missing}\n"
         f"Found: {lights.columns.tolist()}"
     )
     st.stop()
 
-lights = lights[lights["iso"].str.upper() == "USA"].copy()
+lights = lights[lights["iso"].astype(str).str.upper() == "USA"].copy()
 lights["date"] = pd.to_datetime(lights["date"], errors="coerce")
 lights = lights.dropna(subset=["date"])
 
@@ -62,6 +76,10 @@ if df_m.empty:
 b = df_m["avg_rad_month"]
 low, high = np.percentile(b, [p_low, p_high])
 df_m = df_m[df_m["avg_rad_month"].between(low, high)]
+
+if df_m.empty:
+    st.warning("No counties after percentile filter.")
+    st.stop()
 
 st.subheader(f"Brightness distribution across counties – {ym}")
 
