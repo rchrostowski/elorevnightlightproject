@@ -2,191 +2,182 @@
 
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
+import numpy as np
+import plotly.express as px
 
-from src.load_data import load_model_data
+from src.load_data import load_lights_monthly_by_coord
 
 st.set_page_config(
-    page_title="HQ Globe – Night Lights Anomalia",
+    page_title="Night Lights Anomalia Dashboard",
     layout="wide",
 )
 
-def _get_col(df, candidates, required=False):
-    for c in candidates:
-        if c in df.columns:
-            return c
-    if required:
-        raise ValueError(f"Missing required column. Tried: {candidates}")
-    return None
+st.markdown(
+    """
+    <style>
+    .main {
+        background-color: #050710;
+    }
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
-df = load_model_data(fallback_if_missing=True)
+st.markdown(
+    "<h1 style='margin-bottom: 1rem;'>Night Lights Anomalia Dashboard</h1>",
+    unsafe_allow_html=True,
+)
 
-if df.empty:
-    st.error("nightlights_model_data.csv is missing or empty.")
+# ------------------ LOAD COUNTY LIGHTS ------------------
+
+lights = load_lights_monthly_by_coord(fallback_if_missing=True)
+if lights.empty:
+    st.error(
+        "lights_monthly_by_coord.csv is missing or empty.\n\n"
+        "Run `python scripts/build_all.py` and commit "
+        "`data/intermediate/lights_monthly_by_coord.csv`."
+    )
     st.stop()
 
-df["date"] = pd.to_datetime(df["date"], errors="coerce")
-df = df.dropna(subset=["date"])
+lights = lights.copy()
+lights.columns = [c.strip().lower() for c in lights.columns]
 
-lat_col = _get_col(df, ["hq_lat", "lat"])
-lon_col = _get_col(df, ["hq_lon", "lon"])
-if not lat_col or not lon_col:
-    st.error("Expected HQ latitude/longitude columns (e.g., 'hq_lat', 'hq_lon').")
+required = {"iso", "date", "avg_rad_month"}
+if not required.issubset(lights.columns):
+    st.error(
+        f"lights_monthly_by_coord.csv must have columns {required}.\n"
+        f"Found: {lights.columns.tolist()}"
+    )
     st.stop()
 
-brightness_col = _get_col(df, ["brightness_change", "d_light", "delta_light"], required=True)
-ret_fwd_col = _get_col(df, ["ret_fwd_1m", "ret_fwd", "ret_forward_1m"])
-ret_col = _get_col(df, ["ret_excess", "ret", "return"])
+# lat / lon columns from the county-centroid build
+lat_col = None
+lon_col = None
+for cand in ["lat_round", "lat"]:
+    if cand in lights.columns:
+        lat_col = cand
+        break
+for cand in ["lon_round", "lon"]:
+    if cand in lights.columns:
+        lon_col = cand
+        break
 
-st.markdown("## HQ Globe – Hotspots by Night Lights and Returns")
+if lat_col is None or lon_col is None:
+    st.error(
+        "lights_monthly_by_coord.csv must have county coordinates "
+        "(lat_round / lon_round). Rebuild the panel with "
+        "`build_lights_monthly_by_coord`."
+    )
+    st.stop()
+
+# Clean and restrict to USA
+lights = lights[lights["iso"].str.upper() == "USA"].copy()
+lights["date"] = pd.to_datetime(lights["date"], errors="coerce")
+lights = lights.dropna(subset=["date", lat_col, lon_col, "avg_rad_month"])
+
+lights["year_month"] = lights["date"].dt.to_period("M").astype(str)
+
+# ------------------ SIDEBAR ------------------
 
 st.sidebar.header("Globe controls")
 
-dates = sorted(df["date"].unique())
-default_idx = len(dates) - 1
-selected_date = st.sidebar.selectbox(
-    "Select month",
-    options=dates,
-    index=default_idx,
-    format_func=lambda d: pd.Timestamp(d).strftime("%Y-%m"),
+ym_options = sorted(lights["year_month"].unique())
+selected_ym = st.sidebar.selectbox("Year-month", ym_options, index=len(ym_options) - 1)
+
+st.sidebar.caption("Trim extreme brightness outliers")
+p_low, p_high = st.sidebar.slider(
+    "Brightness percentile range",
+    0.0,
+    100.0,
+    (1.0, 99.0),
+    step=1.0,
 )
 
-encode_option = st.sidebar.radio(
-    "Color/size encodes:",
-    options=["Next-month return", "ΔLight (HQ county)"],
-    index=0 if ret_fwd_col else 1,
-)
+# ------------------ FILTER FOR MONTH ------------------
 
-df_m = df[df["date"] == selected_date].copy()
-
+df_m = lights[lights["year_month"] == selected_ym].copy()
 if df_m.empty:
-    st.warning("No observations for the selected month.")
+    st.warning(f"No county lights for {selected_ym}.")
     st.stop()
 
-# Collapse to one point per ticker (HQ)
-group_cols = ["ticker", "firm", "state", "county_name", lat_col, lon_col]
-group_cols = [c for c in group_cols if c in df_m.columns]
+b = df_m["avg_rad_month"]
+low, high = np.percentile(b, [p_low, p_high])
+df_m = df_m[df_m["avg_rad_month"].between(low, high)]
 
-df_hq = (
-    df_m.groupby(group_cols, as_index=False)
-    .agg(
-        d_light=(brightness_col, "mean"),
-        ret_fwd=(ret_fwd_col, "mean") if ret_fwd_col and ret_fwd_col in df_m.columns else ("ticker", "size"),
-    )
-)
+if df_m.empty:
+    st.warning("No points after percentile filter.")
+    st.stop()
 
-if ret_fwd_col and ret_fwd_col in df_m.columns:
-    df_hq["ret_fwd"] = df_hq["ret_fwd"].astype(float)
+df_m = df_m.rename(columns={lat_col: "lat", lon_col: "lon"})
 
-if encode_option == "Next-month return" and ret_fwd_col and ret_fwd_col in df_m.columns:
-    val = df_hq["ret_fwd"].fillna(0)
-    label_title = "Next-month return"
-else:
-    val = df_hq["d_light"].fillna(0)
-    label_title = "ΔLight (HQ county)"
+# ------------------ GLOBE FIGURE ------------------
 
-max_abs = val.abs().max()
-if max_abs == 0:
-    v_norm = pd.Series(0.5, index=val.index)
-else:
-    v_norm = (val / max_abs + 1) / 2.0  # [-max,max] → [0,1]
-
-marker_sizes = 5 + 25 * v_norm
-marker_intensity = v_norm
-
-def _hover(row):
-    ticker = row.get("ticker", "")
-    firm = row.get("firm", "")
-    county = row.get("county_name", "")
-    state = row.get("state", "")
-    txt = f"{ticker} – {firm}<br>{county}, {state}<br>"
-    txt += f"ΔLight: {row['d_light']:.3f}<br>"
-    if "ret_fwd" in row and pd.notna(row["ret_fwd"]):
-        txt += f"Next-month ret: {row['ret_fwd']:.2%}"
-    return txt
-
-hover_text = df_hq.apply(_hover, axis=1)
-
-blue_scale = [
-    [0.0, "rgb(2, 6, 23)"],
-    [0.30, "rgb(13, 37, 88)"],
-    [0.65, "rgb(37, 99, 235)"],
-    [1.0, "rgb(191, 219, 254)"],
-]
-
-fig = go.Figure()
-
-fig.add_trace(
-    go.Scattergeo(
-        lon=df_hq[lon_col],
-        lat=df_hq[lat_col],
-        text=hover_text,
-        hoverinfo="text",
-        mode="markers",
-        marker=dict(
-            size=marker_sizes,
-            color=marker_intensity,
-            colorscale=blue_scale,
-            cmin=0,
-            cmax=1,
-            opacity=0.95,
-        ),
-    )
-)
-
-fig.update_geos(
-    projection_type="orthographic",
-    projection_rotation=dict(lon=-95, lat=30, roll=0),
-    showcountries=True,
-    showcoastlines=False,
-    showland=True,
-    landcolor="rgb(0,0,0)",
-    showocean=True,
-    oceancolor="rgb(0,0,0)",
-    bgcolor="rgba(0,0,0,0)",
+fig = px.scatter_geo(
+    df_m,
+    lat="lat",
+    lon="lon",
+    color="avg_rad_month",
+    size="avg_rad_month",
+    color_continuous_scale="ice",  # dark blue → light blue
+    size_max=7,
+    projection="orthographic",
+    hover_data={"avg_rad_month": ":.4f", "lat": False, "lon": False},
 )
 
 fig.update_layout(
-    title=f"HQ hotspots – {pd.Timestamp(selected_date):%Y-%m} "
-          f"({label_title} encoded by color/size)",
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(0,0,0,0)",
-    margin=dict(l=0, r=0, t=40, b=0),
+    geo=dict(
+        showland=False,
+        showcountries=False,
+        showcoastlines=False,
+        showlakes=False,
+        showocean=True,
+        oceancolor="rgb(0,0,0)",
+    ),
+    paper_bgcolor="rgb(0,0,0)",
+    plot_bgcolor="rgb(0,0,0)",
+    margin=dict(l=0, r=0, t=0, b=0),
+    height=650,
 )
 
-left, right = st.columns([3.2, 1.4])
+fig.update_geos(
+    resolution=50,
+    lataxis_showgrid=False,
+    lonaxis_showgrid=False,
+)
+
+left, right = st.columns([3.2, 1.2])
 
 with left:
-    st.plotly_chart(fig, use_container_width=True, height=650)
+    st.plotly_chart(fig, use_container_width=True)
 
 with right:
     st.markdown("### Month summary")
-    st.markdown(f"**Month:** {pd.Timestamp(selected_date):%Y-%m}")
+    st.markdown(f"**Selected month:** {selected_ym}")
 
-    avg_dlight = df_hq["d_light"].mean()
-    st.metric("Avg ΔLight (HQ)", f"{avg_dlight:.3f}")
+    avg_b = df_m["avg_rad_month"].mean()
+    st.metric("Avg brightness", f"{avg_b:.3f}")
 
-    if "ret_fwd" in df_hq.columns and df_hq["ret_fwd"].notna().any():
-        avg_ret = df_hq["ret_fwd"].mean()
-        st.metric("Avg next-month return", f"{avg_ret:.2%}")
+    st.markdown("#### Brightest counties (by avg_rad_month)")
+    name_col = "name_2" if "name_2" in df_m.columns else None
+    cols = ["avg_rad_month"]
+    if name_col:
+        cols = [name_col] + cols
 
-    st.markdown("#### Top brightening HQs")
     top = (
-        df_hq.sort_values("d_light", ascending=False)
-        .head(10)[["ticker", "firm", "county_name", "state", "d_light"]]
-        .rename(
-            columns={
-                "ticker": "Ticker",
-                "firm": "Firm",
-                "county_name": "County",
-                "state": "State",
-                "d_light": "ΔLight",
-            }
-        )
+        df_m.sort_values("avg_rad_month", ascending=False)
+        .head(10)[cols]
+        .rename(columns={"name_2": "County", "avg_rad_month": "Brightness"})
     )
-    st.dataframe(top, use_container_width=True)
+    st.table(top)
 
-st.caption("Drag to spin the globe. This uses HQ coordinates, not broad state averages.")
+st.caption(
+    "Globe uses VIIRS county-level night-lights (avg_rad_month) for the U.S. "
+    "Color and size both scale with brightness. Drag to rotate."
+)
 
 
 
