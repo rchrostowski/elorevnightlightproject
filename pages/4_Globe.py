@@ -4,15 +4,25 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 
-from src.load_data import load_lights_monthly_by_coord, load_model_data
+# ---- Robust import for data loaders ----
+try:
+    # normal case when src is a package
+    from src.load_data import load_lights_monthly_by_coord, load_model_data
+except ImportError:
+    try:
+        # fallback if Streamlit runs with repo root on PYTHONPATH
+        from load_data import load_lights_monthly_by_coord, load_model_data
+    except ImportError as e:
+        st.error(
+            "Could not import data-loading functions.\n\n"
+            "Make sure `src/` is a package (has __init__.py) and that "
+            "`load_data.py` is in the repo.\n\n"
+            f"Original error: {e}"
+        )
+        st.stop()
 
-# ---------------------------------------------------
-# Page config & basic styling
-# ---------------------------------------------------
-st.set_page_config(
-    page_title="Night Lights Anomalia Dashboard",
-    layout="wide",
-)
+# ---------- Page config & basic styling ----------
+st.set_page_config(page_title="Night Lights Anomalia Dashboard", layout="wide")
 
 st.markdown(
     """
@@ -24,27 +34,6 @@ st.markdown(
         padding-top: 1rem;
         padding-bottom: 1rem;
     }
-    .anomaly-card {
-        background: #0b0e1a;
-        border-radius: 18px;
-        padding: 1rem 1.25rem;
-        border: 1px solid #15192a;
-    }
-    .metric-label {
-        font-size: 0.9rem;
-        color: #c8c8d8;
-    }
-    .metric-value {
-        font-size: 1.4rem;
-        font-weight: 600;
-        color: #ffffff;
-    }
-    .panel-title {
-        font-size: 0.95rem;
-        font-weight: 600;
-        margin-bottom: 0.5rem;
-        color: #ffffff;
-    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -55,9 +44,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ---------------------------------------------------
-# 1. Load data
-# ---------------------------------------------------
+# ---------- 1. Load data ----------
 lights = load_lights_monthly_by_coord(fallback_if_missing=True)
 model = load_model_data(fallback_if_missing=True)
 
@@ -78,7 +65,7 @@ if missing:
     )
     st.stop()
 
-# Clean USA panel
+# Clean/standardize lights
 lights = lights[lights["iso"] == "USA"].copy()
 lights["date"] = pd.to_datetime(lights["date"], errors="coerce")
 lights = lights.dropna(subset=["date"])
@@ -87,13 +74,12 @@ if lights.empty:
     st.error("No valid USA rows in lights panel after cleaning.")
     st.stop()
 
+# Clean/standardize model (may be empty)
 if not model.empty and "date" in model.columns:
     model["date"] = pd.to_datetime(model["date"], errors="coerce")
     model = model.dropna(subset=["date"])
 
-# ---------------------------------------------------
-# 2. State mapping: names -> postal & lat/lon
-# ---------------------------------------------------
+# ---------- 2. State mapping: names -> postal & lat/lon ----------
 STATE_ABBR = {
     "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR",
     "California": "CA", "Colorado": "CO", "Connecticut": "CT", "Delaware": "DE",
@@ -110,7 +96,7 @@ STATE_ABBR = {
     "West Virginia": "WV", "Wisconsin": "WI", "Wyoming": "WY", "Puerto Rico": "PR",
 }
 
-# Rough state centroids for plotting
+# Rough state centroids (lat, lon) – for visualization only
 STATE_COORDS = {
     "AL": (32.7, -86.7),   "AK": (64.8, -147.7), "AZ": (34.0, -111.7),
     "AR": (34.9, -92.3),   "CA": (37.3, -119.7), "CO": (39.0, -105.5),
@@ -143,22 +129,18 @@ if lights.empty:
     )
     st.stop()
 
-# ---------------------------------------------------
-# 3. Sidebar controls
-# ---------------------------------------------------
+# ---------- 3. Sidebar controls ----------
 st.sidebar.header("Globe controls")
 
 unique_dates = sorted(lights["date"].unique())
 selected_date = st.sidebar.selectbox(
     "Month",
     options=unique_dates,
-    index=len(unique_dates) - 1,  # default = latest month in data
+    index=len(unique_dates) - 1,
     format_func=lambda d: pd.Timestamp(d).strftime("%Y-%m"),
 )
 
-# ---------------------------------------------------
-# 4. Filter to selected month & aggregate by state
-# ---------------------------------------------------
+# ---------- 4. Filter data & aggregate by state ----------
 lights_month = lights[lights["date"] == selected_date].copy()
 if lights_month.empty:
     st.warning(
@@ -166,6 +148,7 @@ if lights_month.empty:
     )
     st.stop()
 
+# Average brightness per state
 state_df = (
     lights_month.groupby(["state", "state_name"], as_index=False)["avg_rad_month"]
     .mean()
@@ -180,9 +163,7 @@ if state_df.empty:
     st.error("No states had coordinates mapped for this month.")
     st.stop()
 
-# ---------------------------------------------------
-# 5. Attach state-level returns and use them for marker size/color
-# ---------------------------------------------------
+# ---------- 5. Attach state-level next-month returns ----------
 state_df["ret_fwd_1m"] = pd.NA
 
 if not model.empty and {"ret_fwd_1m", "date"}.issubset(model.columns):
@@ -206,31 +187,32 @@ if not model.empty and {"ret_fwd_1m", "date"}.issubset(model.columns):
             state_df["ret_state"] = pd.NA
 
         state_df["ret_fwd_1m"] = state_df["ret_state"]
+
+# ---------- 6. Visual encodings ----------
+# Use returns for DOT SIZE, brightness for COLOR (if returns exist)
+has_returns = state_df["ret_fwd_1m"].notna().any()
+
+# Color always from brightness
+b = state_df["avg_rad_month"]
+if b.nunique() > 1:
+    b_norm = (b - b.min()) / (b.max() - b.min())
 else:
-    state_df["ret_state"] = pd.NA
+    b_norm = pd.Series(0.5, index=b.index)
 
-use_return = state_df["ret_fwd_1m"].notna().any()
+marker_intensity = b_norm
 
-if use_return:
-    # Sizes & color from next-month returns
-    r = state_df["ret_fwd_1m"].fillna(0)
-    max_abs = r.abs().max()
-    if max_abs == 0:
-        r_norm = pd.Series(0.5, index=r.index)
+if has_returns:
+    r = state_df["ret_fwd_1m"].fillna(0.0)
+    r_abs = r.abs()
+    if r_abs.max() == 0:
+        size_norm = pd.Series(0.5, index=r_abs.index)
     else:
-        r_norm = (r / max_abs + 1) / 2.0  # [-max,max] -> [0,1]
-    marker_sizes = 8 + 22 * r_norm          # 8 → 30
-    marker_intensity = r_norm               # 0 → dark, 1 → bright blue
+        size_norm = r_abs / r_abs.max()
+    marker_sizes = 8 + 22 * size_norm          # 8 → 30 based on |next-month return|
 else:
-    # Fallback: sizes & color from brightness
-    b = state_df["avg_rad_month"]
-    if b.nunique() > 1:
-        b_norm = (b - b.min()) / (b.max() - b.min())
-    else:
-        b_norm = pd.Series(0.5, index=b.index)
-    marker_sizes = 8 + 22 * b_norm
-    marker_intensity = b_norm
+    marker_sizes = 8 + 22 * b_norm             # fallback: size from brightness
 
+# Custom deep-blue colorscale
 blue_scale = [
     [0.0, "rgb(2, 6, 23)"],
     [0.3, "rgb(13, 37, 88)"],
@@ -238,23 +220,16 @@ blue_scale = [
     [1.0, "rgb(191, 219, 254)"],
 ]
 
-# ---------------------------------------------------
-# 6. Build interactive globe
-# ---------------------------------------------------
+# ---------- 7. Build interactive spinning globe ----------
 def _fmt_hover(row):
-    if use_return and pd.notna(row["ret_fwd_1m"]):
-        return (
-            f"{row['state_name']}<br>"
-            f"Brightness: {row['avg_rad_month']:.4f}<br>"
-            f"Next-month return: {row['ret_fwd_1m']:.3f}"
-        )
-    else:
-        return f"{row['state_name']}<br>Brightness: {row['avg_rad_month']:.4f}"
+    base = f"{row['state_name']}<br>Brightness: {row['avg_rad_month']:.4f}"
+    if pd.notna(row.get("ret_fwd_1m", pd.NA)):
+        return base + f"<br>Next-month return: {row['ret_fwd_1m']:.3%}"
+    return base
 
 hover_text = state_df.apply(_fmt_hover, axis=1)
 
 fig = go.Figure()
-
 fig.add_trace(
     go.Scattergeo(
         lon=state_df["lon"],
@@ -291,101 +266,72 @@ fig.update_layout(
     margin=dict(l=0, r=0, t=0, b=0),
 )
 
-# ---------------------------------------------------
-# 7. Layout: globe + summary panel
-# ---------------------------------------------------
+# ---------- 8. Layout: globe + summary panel ----------
 left, right = st.columns([3.2, 1])
 
 with left:
     st.plotly_chart(fig, use_container_width=True, height=650)
 
 with right:
-    # Card 1: description
-    st.markdown("<div class='anomaly-card'>", unsafe_allow_html=True)
-    st.markdown(
-        "<div class='panel-title'>Globe summary</div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f"<p style='font-size:0.85rem; color:#b0b0c5;'>"
-        f"Month: {pd.Timestamp(selected_date).strftime('%Y-%m')}<br>"
-        "Each hotspot is a US state. Marker size and blue intensity "
-        f"{'reflect average next-month return when available, with hover showing both brightness and return.'
-          if use_return else 'reflect average VIIRS nighttime radiance.'}"
-        "</p>",
-        unsafe_allow_html=True,
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # Card 2: metrics + top/bottom states
-    st.markdown("<div class='anomaly-card'>", unsafe_allow_html=True)
-    st.markdown(
-        "<div class='panel-title'>State metrics</div>",
-        unsafe_allow_html=True,
-    )
+    month_label = pd.Timestamp(selected_date).strftime("%Y-%m")
+    st.markdown(f"### {month_label} summary")
 
     avg_brightness = state_df["avg_rad_month"].mean()
-    st.markdown(
-        f"<div class='metric-label'>Avg brightness</div>"
-        f"<div class='metric-value'>{avg_brightness:.2f}</div>",
-        unsafe_allow_html=True,
-    )
+    st.metric("Avg brightness", f"{avg_brightness:.3f}")
 
-    if use_return and state_df["ret_fwd_1m"].notna().any():
+    if has_returns:
         avg_ret = state_df["ret_fwd_1m"].mean()
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown(
-            f"<div class='metric-label'>Avg next-month return</div>"
-            f"<div class='metric-value'>{avg_ret:.2%}</div>",
-            unsafe_allow_html=True,
+        st.metric("Avg next-month return", f"{avg_ret:.2%}")
+
+    # Top & bottom by next-month return if we have it, otherwise by brightness
+    if has_returns:
+        st.markdown("#### Top 5 (highest expected return)")
+        top = (
+            state_df.sort_values("ret_fwd_1m", ascending=False)
+            .head(5)[["state", "state_name", "avg_rad_month", "ret_fwd_1m"]]
+            .rename(
+                columns={
+                    "state": "Code",
+                    "state_name": "State",
+                    "avg_rad_month": "Brightness",
+                    "ret_fwd_1m": "Next-month return",
+                }
+            )
         )
+        st.table(top)
 
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # Top / bottom 5 states by return if available, else by brightness
-    if use_return and state_df["ret_fwd_1m"].notna().any():
-        metric_col = "ret_fwd_1m"
-        label_top = "Top 5 states (next-month return)"
-        label_bottom = "Bottom 5 states (next-month return)"
+        st.markdown("#### Bottom 5 (lowest expected return)")
+        bottom = (
+            state_df.sort_values("ret_fwd_1m", ascending=True)
+            .head(5)[["state", "state_name", "avg_rad_month", "ret_fwd_1m"]]
+            .rename(
+                columns={
+                    "state": "Code",
+                    "state_name": "State",
+                    "avg_rad_month": "Brightness",
+                    "ret_fwd_1m": "Next-month return",
+                }
+            )
+        )
+        st.table(bottom)
     else:
-        metric_col = "avg_rad_month"
-        label_top = "Top 5 states (brightness)"
-        label_bottom = "Bottom 5 states (brightness)"
-
-    st.markdown(f"**{label_top}**")
-    top_states = (
-        state_df.sort_values(metric_col, ascending=False)
-        .head(5)[["state", "state_name", metric_col]]
-        .rename(
-            columns={
-                "state": "Code",
-                "state_name": "State",
-                metric_col: "Value",
-            }
+        st.markdown("#### Top 5 (brightest states)")
+        top_b = (
+            state_df.sort_values("avg_rad_month", ascending=False)
+            .head(5)[["state", "state_name", "avg_rad_month"]]
+            .rename(
+                columns={
+                    "state": "Code",
+                    "state_name": "State",
+                    "avg_rad_month": "Brightness",
+                }
+            )
         )
-    )
-    st.table(top_states)
-
-    st.markdown(f"**{label_bottom}**")
-    bottom_states = (
-        state_df.sort_values(metric_col, ascending=True)
-        .head(5)[["state", "state_name", metric_col]]
-        .rename(
-            columns={
-                "state": "Code",
-                "state_name": "State",
-                metric_col: "Value",
-            }
-        )
-    )
-    st.table(bottom_states)
-
-    st.markdown("</div>", unsafe_allow_html=True)
+        st.table(top_b)
 
 st.caption(
-    f"Globe shows state-level hotspots for "
-    f"{pd.Timestamp(selected_date).strftime('%Y-%m')}. "
-    "Drag to rotate and explore different regions."
+    f"Globe shows state-level hotspots for {pd.Timestamp(selected_date).strftime('%Y-%m')}. "
+    "Dot COLOR reflects relative brightness. Dot SIZE reflects expected next-month "
+    "return when available (otherwise brightness). Drag to rotate and explore different regions."
 )
+
