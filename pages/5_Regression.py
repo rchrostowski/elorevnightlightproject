@@ -19,23 +19,23 @@ st.set_page_config(
 st.title("Regression: Do Nightlights Predict Stock Returns?")
 
 st.markdown(
-    """
+    r"""
 This page runs the **core panel regression** for the project.  
 
 We estimate:
 
-\\[
-\\text{Return}_{i,t+1}
-= \\alpha
-+ \\beta \\cdot \\text{BrightnessChange}_{i,t}
-+ \\gamma_{\\text{month}(t)}
-+ \\varepsilon_{i,t}
-\\]
+\[
+\text{Return}_{i,t+1}
+= \alpha
++ \beta \cdot \text{BrightnessChange}_{i,t}
++ \gamma_{\text{month}(t)}
++ \varepsilon_{i,t}
+\]
 
 - **Return** is next-month stock return for firm *i* (forward return).
 - **BrightnessChange** is the **change in VIIRS night-lights** around the firm’s HQ county from month *t−1* to *t*.
-- **Month fixed effects** (\\(\\gamma_{\\text{month}(t)}\\)) control for market-wide and seasonal effects in each calendar month.
-- The key question: **Is \\(\\beta\\) significantly different from 0?**  
+- **Month fixed effects** (\(\gamma_{\text{month}(t)}\)) control for seasonality and market-wide shocks.
+- The key question: **Is \(\beta\) significantly different from 0?**  
   If yes, **brightness changes contain predictive information** about next-month returns beyond broad market moves and seasonality.
 """
 )
@@ -162,12 +162,12 @@ if len(df) < 50:
 st.subheader("Regression Results")
 
 st.markdown(
-    f"""
+    rf"""
 We estimate the following **fixed-effects panel regression** on the filtered sample:
 
-\\[
-{y_label} = \\alpha + \\beta\\cdot \\text{{BrightnessChange}} + \\gamma_{{\\text{{Year–Month}}}} + \\varepsilon
-\\]
+\[
+{y_label} = \alpha + \beta\cdot \text{{BrightnessChange}} + \gamma_{{\text{{Year–Month}}}} + \varepsilon
+\]
 
 - **Year–Month fixed effects** absorb:
   - Overall market movements in that month
@@ -176,11 +176,10 @@ We estimate the following **fixed-effects panel regression** on the filtered sam
 """
 )
 
-# Build formula
 formula = f"{y_col} ~ brightness_change + C(year_month)"
 
-# We use robust (HC1) standard errors
 try:
+    # Robust standard errors (HC1)
     model = smf.ols(formula, data=df).fit(cov_type="HC1")
 except Exception as e:
     st.error(
@@ -201,40 +200,39 @@ col2.metric("R² (overall fit)", f"{r2:.3f}")
 col3.metric("Adjusted R²", f"{r2_adj:.3f}")
 
 # -----------------------------------------------------------------------------
-# 5. Coefficient table (with BrightnessChange highlighted)
+# 5. Coefficient table and key β from the model (robust to column naming)
 # -----------------------------------------------------------------------------
 summary_table = model.summary2().tables[1].reset_index().rename(columns={"index": "term"})
 
-# Rename columns for display
-summary_table = summary_table.rename(
-    columns={
-        "Coef.": "Coefficient",
-        "Std.Err.": "Std. Error",
-        "P>|t|": "p-value",
-    }
-)
+# Try to standardize some common column names for display only
+rename_map = {}
+for col in summary_table.columns:
+    lower = col.lower()
+    if "coef" in lower and "coef." not in rename_map.values():
+        rename_map[col] = "Coefficient"
+    elif "std" in lower and "err" in lower and "std. error" not in rename_map.values():
+        rename_map[col] = "Std. Error"
+    elif lower.startswith("p>|t|") or lower.startswith("p>"):
+        rename_map[col] = "p-value"
+    elif lower in ["t", "t value", "t-stat", "t statistic"]:
+        rename_map[col] = "t"
 
-# Ensure we have a 't' column robustly
+summary_table = summary_table.rename(columns=rename_map)
+
+# Ensure we have a 't' column: compute if needed
 if "t" not in summary_table.columns:
-    # statsmodels sometimes calls it "t value"
-    if "t value" in summary_table.columns:
-        summary_table = summary_table.rename(columns={"t value": "t"})
+    if "Coefficient" in summary_table.columns and "Std. Error" in summary_table.columns:
+        summary_table["t"] = summary_table["Coefficient"] / summary_table["Std. Error"]
     else:
-        # Compute t-stat manually
-        if "Coefficient" in summary_table.columns and "Std. Error" in summary_table.columns:
-            summary_table["t"] = summary_table["Coefficient"] / summary_table["Std. Error"]
-        else:
-            summary_table["t"] = np.nan
+        summary_table["t"] = np.nan
 
 st.markdown("### Key Coefficient: BrightnessChange")
 
-brightness_row = summary_table[summary_table["term"] == "brightness_change"]
-
-if not brightness_row.empty:
-    row = brightness_row.iloc[0]
-    b_hat = row["Coefficient"]
-    t_stat = row["t"]
-    p_val = row["p-value"]
+# Pull β, t, p *directly* from the model (no dependence on table column names)
+if "brightness_change" in model.params.index:
+    b_hat = float(model.params["brightness_change"])
+    t_stat = float(model.tvalues["brightness_change"])
+    p_val = float(model.pvalues["brightness_change"])
 
     c1, c2, c3 = st.columns(3)
     c1.metric("β (BrightnessChange)", f"{b_hat:.4f}")
@@ -273,7 +271,7 @@ st.dataframe(summary_table, use_container_width=True)
 st.markdown("### Visualization: Brightness vs. Month-Adjusted Returns")
 
 st.markdown(
-    """
+    r"""
 To visualize the regression after controlling for seasonality, we create a **partial regression plot**:
 
 1. **Step 1:** Regress returns on **month fixed effects only** and take the residuals  
@@ -293,7 +291,6 @@ df["ret_fe_resid"] = fe_returns.resid
 fe_bright = smf.ols("brightness_change ~ C(year_month)", data=df).fit()
 df["bright_fe_resid"] = fe_bright.resid
 
-# Sample a subset if huge
 plot_df = df.dropna(subset=["ret_fe_resid", "bright_fe_resid"]).copy()
 if len(plot_df) > 5000:
     plot_df = plot_df.sample(5000, random_state=42)
@@ -376,4 +373,5 @@ So the **brightness coefficient** is identified by **comparing counties that are
 > *“We control for broad market and seasonal effects using month fixed effects, then ask whether local economic activity—proxied by night-time brightness—helps explain which stocks outperform next month. The coefficient on **BrightnessChange** and its t-stat tell us whether there is a statistically meaningful link between lights and returns.”*
 """
 )
+
 
