@@ -92,12 +92,12 @@ How much night-time brightness around a firm’s HQ changed this month.
 — Month fixed effect
 
 Controls for everything happening in that month to all firms:
-   
-	market-wide moves
-    
-	economic shocks
-	
-    seasonality (winter vs. summer)
+
+-market-wide moves
+
+-economic shocks
+
+-seasonality (winter vs. summer)
 	
 This ensures we only compare firms within the same month.
 
