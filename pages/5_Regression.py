@@ -4,6 +4,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import statsmodels.formula.api as smf
+import plotly.express as px
 
 from src.load_data import load_model_data
 
@@ -213,10 +214,21 @@ summary_table = summary_table.rename(
     }
 )
 
-# Metric card for key coefficient: brightness_change
-brightness_row = summary_table[summary_table["term"] == "brightness_change"]
+# Ensure we have a 't' column robustly
+if "t" not in summary_table.columns:
+    # statsmodels sometimes calls it "t value"
+    if "t value" in summary_table.columns:
+        summary_table = summary_table.rename(columns={"t value": "t"})
+    else:
+        # Compute t-stat manually
+        if "Coefficient" in summary_table.columns and "Std. Error" in summary_table.columns:
+            summary_table["t"] = summary_table["Coefficient"] / summary_table["Std. Error"]
+        else:
+            summary_table["t"] = np.nan
 
 st.markdown("### Key Coefficient: BrightnessChange")
+
+brightness_row = summary_table[summary_table["term"] == "brightness_change"]
 
 if not brightness_row.empty:
     row = brightness_row.iloc[0]
@@ -285,8 +297,6 @@ df["bright_fe_resid"] = fe_bright.resid
 plot_df = df.dropna(subset=["ret_fe_resid", "bright_fe_resid"]).copy()
 if len(plot_df) > 5000:
     plot_df = plot_df.sample(5000, random_state=42)
-
-import plotly.express as px
 
 fig = px.scatter(
     plot_df,
