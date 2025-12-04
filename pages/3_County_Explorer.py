@@ -1,366 +1,397 @@
 # pages/3_County_Explorer.py
 
-import streamlit as st
-import pandas as pd
 import numpy as np
+import pandas as pd
 import plotly.express as px
+import streamlit as st
 
 from src.load_data import load_model_data
 
+# ---------------------------------------------------------
+# Page config
+# ---------------------------------------------------------
+st.set_page_config(
+    page_title="County Explorer – Nightlights × Returns",
+    layout="wide",
+)
 
-st.set_page_config(page_title="County Explorer", layout="wide")
+st.title("County Explorer: Nightlights vs. Stock Returns")
 
-
-# --------------------------------------------------------------------
-# Helper: compute per-ticker R² from ret_fwd ~ brightness_change
-# (same logic as in Ticker Explorer, re-used here)
-# --------------------------------------------------------------------
-def compute_ticker_r2_leaderboard(df: pd.DataFrame, min_obs: int = 12) -> pd.DataFrame:
+st.markdown(
     """
-    Compute per-ticker R² from a simple regression:
+This page drills down to the **county level** and connects three ideas:
 
-        ret_fwd ~ brightness_change
+1. **Where are S&P 500 headquarters actually located?**  
+   Each firm is mapped to a specific **county** (e.g., Apple → Santa Clara County, CA).
 
-    Using R² = corr(ret_fwd, brightness_change)^2 for robustness.
-    """
-    # Determine return column
-    ret_col = None
-    if "ret_fwd" in df.columns:
-        ret_col = "ret_fwd"
-    elif "ret_fwd_1m" in df.columns:
-        ret_col = "ret_fwd_1m"
-    elif "ret" in df.columns:
-        ret_col = "ret"
-    else:
-        return pd.DataFrame(
-            {
-                "error": [
-                    "No return column found. Expected one of: 'ret_fwd', 'ret_fwd_1m', 'ret'."
-                ]
-            }
-        )
+2. **How do local night-time lights change over time in that county?**  
+   We track **brightness changes** (ΔLight) over time as a proxy for local economic activity.
 
-    required = {"ticker", "brightness_change", ret_col}
-    missing = required - set(df.columns)
-    if missing:
-        return pd.DataFrame(
-            {"error": [f"Missing columns for R² leaderboard: {missing}"]}
-        )
+3. **Do these brightness changes relate to that stock’s future returns?**  
+   For each ticker–county pair, we look at how well brightness changes explain **next-month returns** using
+   a simple **R² statistic**. Higher R² means brightness changes are more informative for that stock in that
+   location.
 
-    rows = []
-    for tkr, g in df.groupby("ticker"):
-        g = g.dropna(subset=["brightness_change", ret_col])
-        if len(g) < min_obs:
-            continue
-        if g["brightness_change"].nunique() <= 1 or g[ret_col].nunique() <= 1:
-            continue
+Use the controls on the left to filter by **state**, **ticker**, and **minimum observations**, then explore the
+county-level time series and the **leaderboard of counties with the highest R²**.
+"""
+)
 
-        r = g["brightness_change"].corr(g[ret_col])
-        if pd.isna(r):
-            continue
-
-        r2 = float(r**2)
-
-        row = {
-            "ticker": tkr,
-            "R² (ret_vs_brightness)": r2,
-            "n_obs": int(len(g)),
-        }
-        if "firm" in g.columns:
-            row["firm"] = g["firm"].iloc[0]
-        if "county_name" in g.columns:
-            row["HQ county"] = g["county_name"].iloc[0]
-        if "state_full" in g.columns:
-            row["HQ state"] = g["state_full"].iloc[0]
-        elif "state" in g.columns:
-            row["HQ state"] = g["state"].iloc[0]
-
-        rows.append(row)
-
-    if not rows:
-        return pd.DataFrame()
-
-    out = pd.DataFrame(rows)
-    out = out.sort_values("R² (ret_vs_brightness)", ascending=False)
-    return out.reset_index(drop=True)
-
-
-# --------------------------------------------------------------------
+# ---------------------------------------------------------
 # Load and validate data
-# --------------------------------------------------------------------
-panel = load_model_data(fallback_if_missing=True)
+# ---------------------------------------------------------
+df = load_model_data(fallback_if_missing=True)
 
-if panel.empty:
+if df.empty:
     st.error(
-        "nightlights_model_data.csv is empty or missing.\n\n"
-        "Rebuild it with `python scripts/build_all.py`, commit, and redeploy."
+        "nightlights_model_data.csv is missing or empty.\n\n"
+        "Run `python scripts/build_all.py` to rebuild it, commit the CSV in "
+        "`data/final/`, and redeploy."
     )
     st.stop()
 
-required_panel_cols = {
+required_cols = {
     "ticker",
     "firm",
     "county_name",
-    "state",          # 2-letter or full; we'll display what we have
     "date",
     "brightness_change",
 }
-missing_panel = required_panel_cols - set(panel.columns)
-if missing_panel:
+
+missing = required_cols - set(df.columns)
+if missing:
     st.error(
-        f"nightlights_model_data.csv must contain: {required_panel_cols}. "
-        f"Missing: {missing_panel}"
+        f"nightlights_model_data.csv is missing required columns: {missing}\n\n"
+        f"Found columns: {df.columns.tolist()}"
     )
     st.stop()
 
-# Date handling
-panel["date"] = pd.to_datetime(panel["date"], errors="coerce")
-panel = panel.dropna(subset=["date"])
+# Handle state column flexibly
+if "state" in df.columns:
+    df["state_display"] = df["state"].astype(str)
+elif "state_full" in df.columns:
+    df["state_display"] = df["state_full"].astype(str)
+elif "state_key" in df.columns:
+    df["state_display"] = df["state_key"].astype(str)
+else:
+    df["state_display"] = "(Unknown)"
 
-# Decide which return column to use
-ret_col = "ret_fwd" if "ret_fwd" in panel.columns else (
-    "ret_fwd_1m" if "ret_fwd_1m" in panel.columns else "ret"
-)
-if ret_col not in panel.columns:
-    st.error("No return column found. Expected 'ret_fwd', 'ret_fwd_1m', or 'ret'.")
+# Handle forward return column (ret_fwd_1m vs ret_fwd)
+if "ret_fwd_1m" in df.columns:
+    pass
+elif "ret_fwd" in df.columns:
+    df["ret_fwd_1m"] = df["ret_fwd"]
+else:
+    st.error(
+        "nightlights_model_data.csv must contain either `ret_fwd_1m` or `ret_fwd` "
+        "so we can measure next-month returns."
+    )
     st.stop()
 
-# Optional nicer state name
-state_display_col = "state_full" if "state_full" in panel.columns else "state"
+# Ensure proper dtypes
+df["date"] = pd.to_datetime(df["date"], errors="coerce")
+df = df.dropna(subset=["date"])
 
-# --------------------------------------------------------------------
-# Title + explanation
-# --------------------------------------------------------------------
-st.title("County Explorer (HQ-mapped)")
+df["brightness_change"] = pd.to_numeric(df["brightness_change"], errors="coerce")
+df["ret_fwd_1m"] = pd.to_numeric(df["ret_fwd_1m"], errors="coerce")
 
-st.markdown(
-    """
-This page zooms in on the **geography** of our strategy.
+df = df.dropna(subset=["brightness_change", "ret_fwd_1m"])
 
-We first map each **S&P 500 firm** to a specific **headquarters county**. Then, for that
-county, we track:
+if df.empty:
+    st.error("After cleaning, there are no rows with valid brightness_change and ret_fwd_1m.")
+    st.stop()
 
-- **Night-time brightness** (VIIRS) and its **changes over time**, and  
-- The **forward stock returns** for firms headquartered there.
+# ---------------------------------------------------------
+# Sidebar filters
+# ---------------------------------------------------------
+st.sidebar.header("Filters")
 
-This lets us ask two related questions:
+# State filter
+state_options = ["All states"] + sorted(df["state_display"].unique().tolist())
+state_choice = st.sidebar.selectbox("Filter by state:", options=state_options)
 
-1. *Which counties show the biggest swings in night-time economic activity?*  
-2. *Which stocks are most tightly linked to those local brightness changes?*
-"""
+# Ticker filter
+all_tickers = sorted(df["ticker"].unique().tolist())
+ticker_choice = st.sidebar.multiselect(
+    "Filter by ticker (optional):",
+    options=all_tickers,
+    default=[],
 )
 
-# --------------------------------------------------------------------
-# Sidebar: county selection
-# --------------------------------------------------------------------
-st.sidebar.header("County selection")
-
-# Unique counties (county_name + state)
-panel["county_key"] = panel["county_name"].astype(str) + " (" + panel[state_display_col].astype(str) + ")"
-counties_sorted = sorted(panel["county_key"].dropna().unique().tolist())
-default_county = counties_sorted[0] if counties_sorted else None
-
-county_choice = st.sidebar.selectbox(
-    "Choose HQ county:",
-    options=counties_sorted,
-    index=0,
+# Minimum observations per county–ticker for leaderboard
+min_obs = st.sidebar.slider(
+    "Minimum months per county–ticker for R² leaderboard:",
+    min_value=4,
+    max_value=48,
+    value=12,
+    step=1,
 )
 
-# Filter panel to that county
-county_name, county_state = county_choice.rsplit(" (", 1)
-county_state = county_state.rstrip(")")
+# Apply filters
+df_filt = df.copy()
+if state_choice != "All states":
+    df_filt = df_filt[df_filt["state_display"] == state_choice]
 
-county_df = panel[
-    (panel["county_name"].astype(str) == county_name)
-    & (panel[state_display_col].astype(str) == county_state)
-].copy()
+if ticker_choice:
+    df_filt = df_filt[df_filt["ticker"].isin(ticker_choice)]
 
-county_df = county_df.sort_values("date")
+if df_filt.empty:
+    st.warning("No data after applying filters. Try loosening the filters.")
+    st.stop()
 
-st.markdown(
-    f"### County: **{county_name}** ({county_state}) – HQ-mapped firms and brightness"
-)
+# ---------------------------------------------------------
+# High-level summary
+# ---------------------------------------------------------
+min_date = df_filt["date"].min()
+max_date = df_filt["date"].max()
 
-hq_firms = (
-    county_df[["ticker", "firm"]]
-    .drop_duplicates()
-    .sort_values("ticker")
-)
+n_firms = df_filt["firm"].nunique()
+n_tickers = df_filt["ticker"].nunique()
+n_counties = df_filt[["county_name", "state_display"]].drop_duplicates().shape[0]
 
-st.markdown("#### Firms headquartered in this county")
-st.dataframe(hq_firms, use_container_width=True)
-
-st.markdown(
-    """
-Each firm above is **headquartered in this county**, so its night-lights signal is
-coming from **this local economy**. If warehouses, offices, or surrounding commercial
-areas get busier (or quieter), VIIRS brightness will typically move with it.
-"""
-)
-
-# --------------------------------------------------------------------
-# County-level time-series: brightness and average forward returns
-# --------------------------------------------------------------------
-col1, col2 = st.columns(2)
-
+col1, col2, col3, col4 = st.columns(4)
 with col1:
-    st.markdown("#### Brightness change over time (county-level)")
-
-    # Aggregate brightness by county per date
-    bright_ts = (
-        county_df.groupby("date", as_index=False)["brightness_change"]
-        .mean()
-        .rename(columns={"brightness_change": "avg_brightness_change"})
-    )
-
-    if not bright_ts.empty:
-        fig_b = px.line(
-            bright_ts,
-            x="date",
-            y="avg_brightness_change",
-            labels={
-                "date": "Date",
-                "avg_brightness_change": "Average Δ brightness (HQ county)",
-            },
-        )
-        st.plotly_chart(fig_b, use_container_width=True)
-    else:
-        st.info("No brightness_change data for this county.")
-
+    st.metric("Firms in sample", f"{n_firms}")
 with col2:
-    st.markdown("#### Average forward returns over time (county firms)")
-
-    ret_ts = (
-        county_df.groupby("date", as_index=False)[ret_col]
-        .mean()
-        .rename(columns={ret_col: "avg_forward_return"})
+    st.metric("Tickers", f"{n_tickers}")
+with col3:
+    st.metric("HQ counties", f"{n_counties}")
+with col4:
+    st.metric(
+        "Time span",
+        f"{min_date.strftime('%Y-%m')} → {max_date.strftime('%Y-%m')}",
     )
-
-    if not ret_ts.empty:
-        fig_r = px.line(
-            ret_ts,
-            x="date",
-            y="avg_forward_return",
-            labels={
-                "date": "Date",
-                "avg_forward_return": "Average forward return (firms in county)",
-            },
-        )
-        st.plotly_chart(fig_r, use_container_width=True)
-    else:
-        st.info(f"No {ret_col} data for this county.")
 
 st.markdown(
     """
-These two charts summarize the **county-level story**:
+**Interpretation:**  
+We’re working with a panel of S&P 500 firms where each firm is anchored to a **single HQ county**.  
+For every month in the sample, we observe:
 
-- On the **left**, we see how much **night-time brightness in the county** moves over time.  
-- On the **right**, we see the **average forward return** of all HQ firms located there.
+- A **change in night-time brightness** in that county (ΔLight), and  
+- The firm’s **next-month stock return**.
 
-If there is a link between **local economic activity** and **stock performance**, we
-would expect big moves in brightness to be followed by meaningful changes in returns.
+The rest of this page asks: *“In which counties does ΔLight do the best job at explaining next-month returns?”*
 """
 )
 
-# --------------------------------------------------------------------
-# County-level scatter: brightness vs forward returns (all firms in county)
-# --------------------------------------------------------------------
-st.markdown("#### Scatter: Δ brightness vs forward returns (firms in this county)")
-
-df_scatter_c = county_df.dropna(subset=["brightness_change", ret_col])
-
-if len(df_scatter_c) >= 5:
-    fig_scatter_c = px.scatter(
-        df_scatter_c,
-        x="brightness_change",
-        y=ret_col,
-        color="ticker",
-        labels={
-            "brightness_change": "Δ brightness (HQ county)",
-            ret_col: "Forward return",
-            "ticker": "Ticker",
-        },
+# ---------------------------------------------------------
+# County summary table
+# ---------------------------------------------------------
+group_cols = ["state_display", "county_name"]
+county_summary = (
+    df_filt.groupby(group_cols)
+    .agg(
+        n_obs=("date", "size"),
+        n_firms=("firm", "nunique"),
+        n_tickers=("ticker", "nunique"),
+        avg_brightness_change=("brightness_change", "mean"),
+        avg_next_month_ret=("ret_fwd_1m", "mean"),
     )
-    st.plotly_chart(fig_scatter_c, use_container_width=True)
+    .reset_index()
+)
 
-    r_c = df_scatter_c["brightness_change"].corr(df_scatter_c[ret_col])
-    r2_c = r_c**2 if pd.notna(r_c) else np.nan
+county_summary["county_label"] = (
+    county_summary["county_name"] + " (" + county_summary["state_display"] + ")"
+)
 
-    st.markdown(
-        f"""
-If we pool all firms headquartered in **{county_name} ({county_state})** and look at
+st.subheader("County-level summary")
 
-\\[
-\\text{{{ret_col}}} = \\alpha + \\beta \\cdot \\text{{brightness\_change}} + \\varepsilon,
-\\]
+st.markdown(
+    """
+This table aggregates the panel to the **county level**:
 
-the squared correlation (approximate R²) is about **{r2_c:.3f}**.
+- **n_obs** – number of month-firm observations in the county  
+- **n_firms / n_tickers** – how many distinct firms/tickers are headquartered there  
+- **avg_brightness_change** – average ΔLight across all firm-months in that county  
+- **avg_next_month_ret** – average forward return for firms in that county  
 
-This is a **county-level measure** of how much local brightness helps explain the
-subsequent stock performance of firms based there.
+You can click on a specific county below to see a detailed **time-series view**.
 """
+)
+
+st.dataframe(
+    county_summary[
+        [
+            "county_label",
+            "n_obs",
+            "n_firms",
+            "n_tickers",
+            "avg_brightness_change",
+            "avg_next_month_ret",
+        ]
+    ].sort_values("n_obs", ascending=False),
+    use_container_width=True,
+    height=350,
+)
+
+# ---------------------------------------------------------
+# Drill-down: county-level time series
+# ---------------------------------------------------------
+st.subheader("County drill-down: ΔLight and next-month returns over time")
+
+if not county_summary.empty:
+    default_county = county_summary.sort_values("n_obs", ascending=False)["county_label"].iloc[0]
+    selected_county_label = st.selectbox(
+        "Choose a county to visualize:",
+        options=county_summary["county_label"].tolist(),
+        index=county_summary["county_label"].tolist().index(default_county),
     )
-else:
-    st.info(
-        "Not enough non-missing observations in this county to draw a scatter or estimate a meaningful R²."
+
+    sel_row = county_summary[county_summary["county_label"] == selected_county_label].iloc[0]
+    sel_state = sel_row["state_display"]
+    sel_county = sel_row["county_name"]
+
+    ts = (
+        df_filt[
+            (df_filt["state_display"] == sel_state)
+            & (df_filt["county_name"] == sel_county)
+        ]
+        .sort_values("date")
+        .copy()
     )
 
-# --------------------------------------------------------------------
-# Global ticker-level R² leaderboard (county / HQ view)
-# --------------------------------------------------------------------
-st.markdown("---")
-st.markdown("## Ticker R² leaderboard – HQ county night-lights vs returns")
-
-leader = compute_ticker_r2_leaderboard(panel)
-
-if leader.empty or "error" in leader.columns:
-    if not leader.empty and "error" in leader.columns:
-        st.error(leader["error"].iloc[0])
+    if ts.empty:
+        st.warning("No time-series data for this county after filters.")
     else:
-        st.info(
-            "Not enough data to compute the ticker R² leaderboard. "
-            "We need valid brightness_change and forward returns."
+        # Two side-by-side charts: returns and brightness
+        c1, c2 = st.columns(2)
+
+        with c1:
+            fig_ret = px.line(
+                ts,
+                x="date",
+                y="ret_fwd_1m",
+                title=f"Next-month returns – {selected_county_label}",
+                labels={"date": "Month", "ret_fwd_1m": "Next-month return"},
+            )
+            fig_ret.update_layout(
+                height=350,
+                margin=dict(l=10, r=10, t=40, b=10),
+            )
+            st.plotly_chart(fig_ret, use_container_width=True)
+
+        with c2:
+            fig_light = px.line(
+                ts,
+                x="date",
+                y="brightness_change",
+                title=f"Brightness change (ΔLight) – {selected_county_label}",
+                labels={"date": "Month", "brightness_change": "Brightness change"},
+            )
+            fig_light.update_layout(
+                height=350,
+                margin=dict(l=10, r=10, t=40, b=10),
+            )
+            st.plotly_chart(fig_light, use_container_width=True)
+
+        st.markdown(
+            """
+**How to read these charts:**
+
+- The **left chart** shows the **stock’s next-month return** for each firm-month headquartered in this county.  
+- The **right chart** shows the **change in night-time brightness (ΔLight)** in the same county over time.  
+
+When you see periods where **ΔLight spikes or drops** and **returns move in the same direction in the following month**,  
+that’s exactly the pattern our regression is trying to quantify.
+"""
         )
-else:
-    st.markdown(
-        """
-Here we move from **one county at a time** to the **entire S&P 500 universe**.
 
-For each stock, we run a simple regression:
+# ---------------------------------------------------------
+# R² leaderboard (county × ticker)
+# ---------------------------------------------------------
+st.subheader("Leaderboard: Counties where brightness explains returns best")
 
+st.markdown(
+    """
+Here we ask a more *statistical* question:
+
+> For each **ticker–county** combination, how well do brightness changes explain next-month returns?
+
+For every ticker–county pair, we compute a simple **R²** from a regression of:
 \\[
-\\text{forward return} = \\alpha + \\beta \\cdot \\text{brightness\_change} + \\varepsilon
+\\text{ret\_fwd\_1m} = \\alpha + \\beta \\cdot \\text{brightness\_change} + \\varepsilon
 \\]
 
-using that stock’s HQ county brightness, and compute the **R²** from the squared
-correlation.
-
-- A **high R²** means: the stock’s forward returns are **strongly related**
-  to swings in local brightness around HQ.  
-- A **low R²** means: night-lights carry little information for that ticker.
-
-This gives us a **ranking of names** where night-time lights are most promising as a
-trading signal.
+- A **higher R²** means brightness changes do a better job of explaining variation in returns.  
+- The **sign** (shown as *Signed R²*) indicates whether the relationship is **positive** or **negative**  
+  (positive = higher brightness → higher returns, on average).
 """
+)
+
+def simple_r2(group: pd.DataFrame) -> float:
+    """Signed R² from simple correlation between brightness_change and ret_fwd_1m."""
+    g = group.dropna(subset=["brightness_change", "ret_fwd_1m"]).copy()
+    if len(g) < min_obs:
+        return np.nan
+    x = g["brightness_change"]
+    y = g["ret_fwd_1m"]
+    if x.var() == 0 or y.var() == 0:
+        return np.nan
+    r = x.corr(y)
+    if pd.isna(r):
+        return np.nan
+    return float(np.sign(r) * (r ** 2))
+
+
+rows = []
+group_cols_r2 = ["ticker", "firm", "county_name", "state_display"]
+
+for keys, sub in df_filt.groupby(group_cols_r2):
+    r2_signed = simple_r2(sub)
+    if not np.isnan(r2_signed):
+        ticker, firm, county_name, state_disp = keys
+        rows.append(
+            {
+                "ticker": ticker,
+                "firm": firm,
+                "county_name": county_name,
+                "state": state_disp,
+                "n_obs": len(sub),
+                "r2_signed": r2_signed,
+                "r2_abs": abs(r2_signed),
+            }
+        )
+
+if not rows:
+    st.warning(
+        "Could not compute any R² values with the current filters and minimum observation threshold."
     )
+else:
+    leaderboard = pd.DataFrame(rows)
+    leaderboard = leaderboard.sort_values("r2_abs", ascending=False)
+
+    st.markdown("#### Top county–ticker combinations by |R²|")
 
     st.dataframe(
-        leader.head(10)[
-            [
-                "ticker",
-                "firm",
-                "HQ county",
-                "HQ state",
-                "R² (ret_vs_brightness)",
-                "n_obs",
-            ]
-        ],
+        leaderboard[
+            ["ticker", "firm", "county_name", "state", "n_obs", "r2_signed", "r2_abs"]
+        ]
+        .head(15)
+        .rename(
+            columns={
+                "county_name": "County",
+                "state": "State",
+                "n_obs": "# Months",
+                "r2_signed": "Signed R²",
+                "r2_abs": "|R²|",
+            }
+        ),
         use_container_width=True,
+        height=400,
     )
 
-    st.caption(
-        "In our dataset, the top names (e.g., IDXX, OTIS, MCK, SRE, COIN) show R² "
-        "in the ~0.13–0.18 range. That is **unusually high** for return data, and "
-        "it suggests that night-time brightness around HQ carries real forward-looking "
-        "information for those firms."
+    st.markdown(
+        """
+**Interpretation:**
+
+- **|R²|** close to 0 → ΔLight does **not** explain much of the variation in that stock’s returns.  
+- **|R²|** closer to 1 → ΔLight explains **a lot** of the return variation for that ticker in that county.  
+- A **positive Signed R²** means brighter-than-usual months tend to be followed by **higher** returns.  
+- A **negative Signed R²** means brighter-than-usual months tend to be followed by **lower** returns (or the signal is noisy).
+
+This leaderboard is a concrete way to answer:  
+> “For which **stocks and HQ locations** does night-time brightness contain the most information about future returns?”
+"""
     )
+
