@@ -68,33 +68,48 @@ Equation:
 Rt+1=βLt+γt
 	
 What Each Variable Means
+
 𝑅𝑡+1
+
 Rt+1
  — Next-month return
+
 The stock’s return in month t+1, which we try to predict.
 
 𝐿𝑡
+
 Lt	​
  — Brightness change (“Light Surprise”)
 𝐿𝑡= Brightness𝑡 − Brightness𝑡−1
 Lt=Brightnesst − Brightnesst−1
+
 How much night-time brightness around a firm’s HQ changed this month.
 
 𝛾𝑡
+
 γt
 — Month fixed effect
+
 Controls for everything happening in that month to all firms:
-    -market-wide moves
-    -economic shocks
+   
+	-market-wide moves
+    
+	-economic shocks
+	
     -seasonality (winter vs. summer)
+	
 This ensures we only compare firms within the same month.
 
 𝛽
+
 β — Brightness→Return effect
 
 The key parameter:
+
 β > 0 → brighter-than-usual counties tend to have higher next-month returns
+
 β < 0 → brightness spikes predict lower returns
+
 β ≈ 0 → brightness contains no predictive power
 """)
 
