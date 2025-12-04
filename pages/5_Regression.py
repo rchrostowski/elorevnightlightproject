@@ -62,10 +62,15 @@ st.subheader("🔧 Model Specification")
 st.markdown(r"""
 We estimate a **panel regression** at the firm–month level:
 
+
+
 Equation:
 𝑅𝑡+1 = 𝛽𝐿𝑡 + 𝛾𝑡
 
 Rt+1=βLt+γt
+
+
+
 
 	
 What Each Variable Means
