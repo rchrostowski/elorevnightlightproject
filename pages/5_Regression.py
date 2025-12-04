@@ -1,4 +1,5 @@
 # pages/5_Regression.py
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -6,12 +7,14 @@ import statsmodels.formula.api as smf
 
 from src.load_data import load_model_data
 
-st.set_page_config(page_title="Regression Analysis", layout="wide")
-
+# ----------------------------
+# Page config
+# ----------------------------
+st.set_page_config(page_title="Regression: Lights → Returns", layout="wide")
 st.title("📈 Regression: Do Night-Lights Predict Next-Month Returns?")
 
 # ----------------------------
-# 1. LOAD DATA
+# 1. Load and clean data
 # ----------------------------
 panel = load_model_data(fallback_if_missing=True)
 
@@ -19,24 +22,40 @@ if panel.empty:
     st.error("nightlights_model_data.csv is missing or empty.")
     st.stop()
 
-# Ensure needed columns exist
-required = {"ticker", "firm", "county_name", "date",
-            "brightness_change", "ret_fwd_1m"}
+required_cols = {
+    "ticker",
+    "firm",
+    "county_name",
+    "date",
+    "brightness_change",
+    "ret_fwd_1m",
+}
 
-missing = required - set(panel.columns)
+missing = required_cols - set(panel.columns)
 if missing:
     st.error(
-        f"nightlights_model_data.csv must contain: {required}. "
-        f"Missing: {missing}"
+        "nightlights_model_data.csv must contain: "
+        f"{required_cols}. Missing: {missing}"
     )
     st.stop()
 
-# Clean types
+# Basic cleaning
+panel = panel.copy()
 panel["date"] = pd.to_datetime(panel["date"], errors="coerce")
+panel["brightness_change"] = pd.to_numeric(panel["brightness_change"], errors="coerce")
+panel["ret_fwd_1m"] = pd.to_numeric(panel["ret_fwd_1m"], errors="coerce")
+
 panel = panel.dropna(subset=["date", "brightness_change", "ret_fwd_1m"])
 
+if panel.empty:
+    st.error("After cleaning, there are no valid observations for regression.")
+    st.stop()
+
+# Year-month fixed effect key
+panel["ym"] = panel["date"].dt.to_period("M").astype(str)
+
 # ----------------------------
-# 2. RUN REGRESSION
+# 2. Run regressions
 # ----------------------------
 st.subheader("🔧 Model Specification")
 
@@ -48,134 +67,197 @@ We estimate the model:
 = \alpha + \beta \cdot \Delta\text{Light}_{i,t} + \gamma_{\text{year-month}} + \varepsilon_{i,t}
 \]
 
-- **Return<sub>i,t+1</sub>** = next-month stock return  
-- **ΔLight<sub>i,t</sub>** = month-over-month brightness change around the firm’s HQ county  
-- **γ<sub>year-month</sub>** = year-month fixed effects  
+- **Return<sub>i,t+1</sub>** = next-month stock return for firm *i*  
+- **ΔLight<sub>i,t</sub>** = month-over-month brightness change around firm *i*'s HQ county  
+- **γ<sub>year-month</sub>** = year–month fixed effects (market + seasonality controls)  
 """)
 
-# Create year-month FE
-panel["ym"] = panel["date"].dt.to_period("M").astype(str)
-
-# Build regression dataset
 reg_df = panel.copy()
-reg_df = reg_df.dropna(subset=["brightness_change", "ret_fwd_1m"])
 
-# Fit model with formula
-model = smf.ols("ret_fwd_1m ~ brightness_change + C(ym)", data=reg_df).fit()
+# Full model: brightness + month FE
+model_full = smf.ols(
+    "ret_fwd_1m ~ brightness_change + C(ym)",
+    data=reg_df
+).fit()
+
+# FE-only model (no brightness), to see incremental R² of brightness
+model_fe_only = smf.ols(
+    "ret_fwd_1m ~ C(ym)",
+    data=reg_df
+).fit()
+
+# Extract key stats
+beta = float(model_full.params.get("brightness_change", np.nan))
+se = float(model_full.bse.get("brightness_change", np.nan))
+t_val = float(model_full.tvalues.get("brightness_change", np.nan))
+p_val = float(model_full.pvalues.get("brightness_change", np.nan))
+
+r2_full = float(model_full.rsquared)
+r2_fe = float(model_fe_only.rsquared)
+r2_incremental = r2_full - r2_fe
+
+# 95% CI for beta if SE is valid
+if np.isfinite(beta) and np.isfinite(se) and se > 0:
+    ci_low = beta - 1.96 * se
+    ci_high = beta + 1.96 * se
+else:
+    ci_low = np.nan
+    ci_high = np.nan
+
+n_obs = int(model_full.nobs)
 
 # ----------------------------
-# 3. SHOW RESULTS
+# 3. Show numeric results
 # ----------------------------
-st.subheader("📊 Regression Output")
+st.subheader("📊 Regression Results (Actual Numbers)")
 
-coef_table = pd.DataFrame({
-    "term": model.params.index,
-    "coef": model.params.values,
-    "std_err": model.bse.values,
-    "t": model.tvalues.values,
-    "pval": model.pvalues.values,
-})
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Observations (firm-months)", f"{n_obs:,}")
+col2.metric("R² (full model)", f"{r2_full:.3f}")
+col3.metric("R² from month FE only", f"{r2_fe:.3f}")
+col4.metric("Incremental R² from brightness", f"{r2_incremental:.4f}")
 
-# Only show brightness + intercept
-main_terms = coef_table[coef_table["term"].str.contains("brightness_change|Intercept")]
+st.markdown("#### Key Coefficient: BrightnessChange → Next-Month Return")
 
-st.write(main_terms)
+metrics_df = pd.DataFrame(
+    {
+        "term": ["brightness_change"],
+        "beta": [beta],
+        "std_err": [se],
+        "t_stat": [t_val],
+        "p_value": [p_val],
+        "ci_low_95": [ci_low],
+        "ci_high_95": [ci_high],
+    }
+)
 
-st.metric("Model R²", f"{model.rsquared:.3f}")
+st.dataframe(metrics_df, use_container_width=True)
+
+m1, m2, m3 = st.columns(3)
+m1.metric("β (brightness_change)", f"{beta:.6f}")
+m2.metric("t-stat(β)", f"{t_val:.3f}")
+m3.metric("p-value(β)", f"{p_val:.3f}")
 
 # ----------------------------
-# 4. INTERPRETATION SECTION
+# 4. Interpretation: Answer the research question
 # ----------------------------
-st.subheader("📘 Interpretation (Presentation-Ready)")
+st.subheader("📘 Interpretation – What Do These Numbers Mean?")
 
-st.markdown("""
-### **1. What question are we answering?**
-**Do month-to-month changes in night-time brightness around a firm’s HQ predict its next-month stock return?**
+st.markdown(f"""
+### 1️⃣ What question are we answering?
+
+> **“Do changes in local night-time brightness around a firm’s HQ predict its next-month stock return?”**
+
+We’re using **satellite night-lights (VIIRS)** as a proxy for **local economic activity** around each firm’s headquarters and asking whether sudden increases or decreases in brightness show up in **future stock returns**.
 
 ---
 
-### **2. What data did we analyze?**
-We constructed a panel of **S&P 500 firms** from **2018–present**, matching each firm to its **HQ county**.
+### 2️⃣ What data do we use?
 
-For every firm-month, we computed:
+- A **panel of S&P 500 firms × months** from **2018 onward**  
+- For each firm-month we link:
+  - the firm’s **HQ county**  
+  - the corresponding **VIIRS night-lights brightness**  
+- We compute:
+  - **Brightness level** and a **brightness surprise**  
+    \[
+    \Delta\text{{Light}} = \text{{Light}}_t - \text{{Light}}_{{t-1}}
+    \]
+  - **Next-month stock return** (so the brightness signal comes *before* the return)
 
-- **Brightness level** (VIIRS satellite night-lights)
-- **Brightness surprise**:  
-  \[
-  \Delta\text{Light} = \text{Light}_{t} - \text{Light}_{t-1}
-  \]
-- **Next-month stock return**, ensuring the brightness change comes **before** the return.
+Total usable sample size after cleaning: **{n_obs:,} firm-month observations**.
 
 ---
 
-### **3. What model did we estimate?**
+### 3️⃣ What model do we estimate?
 
-We regress:
+We run the regression:
 
 \[
-\text{Return}_{i,t+1} = \alpha + \beta \cdot \Delta\text{Light}_{i,t} + \gamma_{\text{year-month}} + \varepsilon_{i,t}
+\text{{Return}}_{{i,t+1}}
+= \alpha + \beta \cdot \Delta\text{{Light}}_{{i,t}} + \gamma_{{\text{{year-month}}}} + \varepsilon_{{i,t}}
 \]
 
-The **year-month fixed effects** remove:
+- **Return<sub>i,t+1</sub>** is the **next-month** stock return  
+- **ΔLight<sub>i,t</sub>** is the **month-over-month change in brightness** around the HQ county  
+- **γ<sub>year-month</sub>** are **year–month fixed effects**, which remove:
+  - market-wide up or down moves that month  
+  - seasonal patterns (winter vs. summer)  
+  - big macro shocks (COVID months, stimulus months, etc.)
 
-- broad market movements,
-- seasonal patterns (winter vs. summer),
-- month-specific shocks (COVID volatility, stimulus periods, etc.).
-
-This means **β is only identified by comparing firms to each other within the exact same month.**
-
----
-
-### **4. What do the coefficients mean? (Your actual results)**
-
-- The **β coefficient on brightness_change is extremely close to zero**.
-- The **t-statistic is very small**, far below conventional significance thresholds.
-- The **p-value is large**, meaning the signal is statistically indistinguishable from noise.
-
-### 🔎 Interpretation:
-> **Brightness changes around firm HQs do NOT predict next-month returns once we control for market-wide month effects.**
-
-Whether a county lights up more than usual tells us **nothing reliable** about how that firm's stock performs the following month.
+So the **β coefficient** is identified by comparing **firms located in brighter vs. dimmer counties *within the same calendar month***.
 
 ---
 
-### **5. What does the R² mean?**
+### 4️⃣ What do the β and t-stat actually say in our results?
 
-The R² is approximately **0.26**, which might sound moderate —  
-but almost **all** of it is explained by:
+From the estimated model:
 
-- month fixed effects  
-- i.e., the market going up or down that month
+- **β (brightness_change)** ≈ `{beta:.6f}`  
+- **t-stat(β)** ≈ `{t_val:.3f}`  
+- **p-value(β)** ≈ `{p_val:.3f}`  
+- **95% CI for β** ≈ `[ {ci_low:.6f} , {ci_high:.6f} ]`
 
-Brightness contributes **almost zero incremental explanatory power**.
+#### Interpretation:
+
+- β is **very close to zero**.
+- The **t-stat is small** and the **p-value is large**, so the effect is **not statistically significant**.
+- The 95% confidence interval is **centered near zero and easily includes zero**, which means we **cannot reject** the hypothesis that the true β is zero.
+
+> **In plain English:**  
+> When a firm’s HQ area suddenly lights up more (or less) than last month, we do **not** see a consistent pattern in the next-month stock return once we control for what the overall market is doing that month.
+
+So:
+
+- No meaningful evidence of a **positive β** (lights predicting higher returns)  
+- No meaningful evidence of a **negative β** (lights predicting reversals or crashes)  
+- The estimated relationship is **statistically indistinguishable from noise**.
 
 ---
 
-### **6. So what is the final answer to the central research question?**
+### 5️⃣ What does the R² tell us here?
 
-> **After controlling for market and seasonal effects using month fixed effects, we find no evidence that night-time brightness contains predictive information about next-month stock returns.**
+- **R² (full model with brightness + month FE)** ≈ **{r2_full:.3f}**  
+- **R² (month FE only, no brightness)** ≈ **{r2_fe:.3f}**  
+- **Incremental R² from brightness** ≈ **{r2_incremental:.4f}**
 
-Night-lights DO capture local economic activity, but that activity **does not translate into tradable return forecasts** at the monthly horizon.
+This means:
+
+- The model explains about **{r2_full:.1%}** of the variation in returns,  
+- But **almost all** of that explanatory power comes from the **year–month fixed effects**, i.e.:
+  - the market going up or down in a given month  
+  - common shocks affecting almost all firms together  
+
+The **extra R² contributed by brightness itself** is only **{r2_incremental:.4f}**, which is tiny.
+
+> **So brightness is not adding real predictive power on top of just knowing which month we’re in.**
 
 ---
 
-### **7. One-sentence takeaway (read this aloud):**
+### 6️⃣ Direct answer to the main research question
 
-> “Brightness changes show real economic movement around firms, but they do not generate statistically meaningful predictions for next-month stock returns once common market effects are removed.”  
+> **Q:** *“Do changes in local night-time brightness around a firm’s HQ predict its next-month stock return?”*  
+
+**A:** Based on our regression:
+
+- The **brightness-change coefficient is near zero**,
+- The **t-statistic shows no statistical significance**,  
+- The **incremental R² from brightness is essentially zero**.
+
+> **Therefore, our data show *no evidence* that night-time light changes around firm headquarters predict next-month stock returns once we control for overall market and seasonal effects.**
+
+---
+
+### 7️⃣ One-sentence line you can read in the presentation
+
+> “After running a month-fixed-effects regression on over {n_obs:,} firm-month observations, we find that changes in local night-time brightness around firm headquarters do *not* have a statistically meaningful impact on next-month stock returns — almost all of the model’s explanatory power comes from broad market movements, not from the light data.”
 """)
 
 # ----------------------------
-# 5. OPTIONAL: COEFFICIENT CHART
+# 5. (Optional) Show regression summary if you want to scroll
 # ----------------------------
-st.subheader("📉 Coefficient Visualization")
-
-coef_val = model.params["brightness_change"]
-t_val = model.tvalues["brightness_change"]
-p_val = model.pvalues["brightness_change"]
-
-st.metric("β (Brightness → Return)", f"{coef_val:.6f}")
-st.metric("t-stat", f"{t_val:.3f}")
-st.metric("p-value", f"{p_val:.3f}")
+with st.expander("🔍 Full statsmodels summary (for graders / debugging)"):
+    st.text(model_full.summary().as_text())
 
 
 
