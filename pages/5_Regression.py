@@ -60,16 +60,32 @@ panel["ym"] = panel["date"].dt.to_period("M").astype(str)
 st.subheader("🔧 Model Specification")
 
 st.markdown(r"""
-We estimate the model:
+We estimate a **panel regression** at the firm–month level:
 
 \[
-\text{Return}_{i,t+1}
-= \alpha + \beta \cdot \Delta\text{Light}_{i,t} + \gamma_{\text{year-month}} + \varepsilon_{i,t}
+\text{Ret}_{i,t+1}
+= \alpha \;+\; \beta \,\Delta \text{Light}_{i,t} \;+\; \gamma_t \;+\; \varepsilon_{i,t}
 \]
 
-- **Return<sub>i,t+1</sub>** = next-month stock return for firm *i*  
-- **ΔLight<sub>i,t</sub>** = month-over-month brightness change around firm *i*'s HQ county  
-- **γ<sub>year-month</sub>** = year–month fixed effects (market + seasonality controls)  
+Where:
+
+- \( \text{Ret}_{i,t+1} \) = **next-month stock return** for firm \(i\) in month \(t+1\).  
+- \( \Delta \text{Light}_{i,t} \) = **change in night-time brightness** around the HQ county of firm \(i\) from month \(t-1\) to month \(t\):
+
+\[
+\Delta \text{Light}_{i,t}
+= \text{Light}_{i,t} - \text{Light}_{i,t-1}
+\]
+
+- \( \gamma_t \) = **year–month fixed effect** (one dummy for each calendar year–month).  
+  These absorb:
+  - market-wide moves that month,  
+  - macro news,  
+  - seasonality (winter vs. summer, COVID periods, etc.).  
+
+- \( \varepsilon_{i,t} \) = regression error term.
+
+Because we include \( \gamma_t \), the coefficient \( \beta \) is identified by comparing **firms in brighter vs. dimmer HQ counties *within the same month***, after removing common market and seasonal effects.
 """)
 
 reg_df = panel.copy()
@@ -174,18 +190,18 @@ Total usable sample size after cleaning: **{n_obs:,} firm-month observations**.
 We run the regression:
 
 \[
-\text{{Return}}_{{i,t+1}}
-= \alpha + \beta \cdot \Delta\text{{Light}}_{{i,t}} + \gamma_{{\text{{year-month}}}} + \varepsilon_{{i,t}}
+\text{{Ret}}_{{i,t+1}}
+= \alpha + \beta \cdot \Delta\text{{Light}}_{{i,t}} + \gamma_t + \varepsilon_{{i,t}}
 \]
 
-- **Return<sub>i,t+1</sub>** is the **next-month** stock return  
+- **Ret<sub>i,t+1</sub>** is the **next-month** stock return  
 - **ΔLight<sub>i,t</sub>** is the **month-over-month change in brightness** around the HQ county  
-- **γ<sub>year-month</sub>** are **year–month fixed effects**, which remove:
+- **γ<sub>t</sub> (year–month fixed effects)** remove:
   - market-wide up or down moves that month  
   - seasonal patterns (winter vs. summer)  
   - big macro shocks (COVID months, stimulus months, etc.)
 
-So the **β coefficient** is identified by comparing **firms located in brighter vs. dimmer counties *within the same calendar month***.
+So the **β coefficient** is identified by comparing **firms located in brighter vs. dimmer HQ counties *within the same calendar month***.
 
 ---
 
@@ -258,6 +274,5 @@ The **extra R² contributed by brightness itself** is only **{r2_incremental:.4f
 # ----------------------------
 with st.expander("🔍 Full statsmodels summary (for graders / debugging)"):
     st.text(model_full.summary().as_text())
-
 
 
