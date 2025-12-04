@@ -62,30 +62,40 @@ st.subheader("🔧 Model Specification")
 st.markdown(r"""
 We estimate a **panel regression** at the firm–month level:
 
-\[
-\text{Ret}_{i,t+1}
-= \alpha \;+\; \beta \,\Delta \text{Light}_{i,t} \;+\; \gamma_t \;+\; \varepsilon_{i,t}
-\]
+Equation:
+𝑅𝑡+1 = 𝛽𝐿𝑡 + 𝛾𝑡
 
-Where:
+Rt+1=βLt+γt
+	
+What Each Variable Means
+𝑅𝑡+1
+Rt+1
+ — Next-month return
+The stock’s return in month t+1, which we try to predict.
 
-- \( \text{Ret}_{i,t+1} \) = **next-month stock return** for firm \(i\) in month \(t+1\).  
-- \( \Delta \text{Light}_{i,t} \) = **change in night-time brightness** around the HQ county of firm \(i\) from month \(t-1\) to month \(t\):
+𝐿𝑡
+Lt	​
+ — Brightness change (“Light Surprise”)
+𝐿𝑡= Brightness𝑡 − Brightness𝑡−1
+Lt=Brightnesst − Brightnesst−1
+How much night-time brightness around a firm’s HQ changed this month.
 
-\[
-\Delta \text{Light}_{i,t}
-= \text{Light}_{i,t} - \text{Light}_{i,t-1}
-\]
+𝛾𝑡
+γt
+— Month fixed effect
+Controls for everything happening in that month to all firms:
+    -market-wide moves
+    -economic shocks
+    -seasonality (winter vs. summer)
+This ensures we only compare firms within the same month.
 
-- \( \gamma_t \) = **year–month fixed effect** (one dummy for each calendar year–month).  
-  These absorb:
-  - market-wide moves that month,  
-  - macro news,  
-  - seasonality (winter vs. summer, COVID periods, etc.).  
+𝛽
+β — Brightness→Return effect
 
-- \( \varepsilon_{i,t} \) = regression error term.
-
-Because we include \( \gamma_t \), the coefficient \( \beta \) is identified by comparing **firms in brighter vs. dimmer HQ counties *within the same month***, after removing common market and seasonal effects.
+The key parameter:
+β > 0 → brighter-than-usual counties tend to have higher next-month returns
+β < 0 → brightness spikes predict lower returns
+β ≈ 0 → brightness contains no predictive power
 """)
 
 reg_df = panel.copy()
