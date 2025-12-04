@@ -10,11 +10,11 @@ from src.load_data import load_model_data
 # Page config
 # ----------------------------
 st.set_page_config(
-    page_title="Night Lights & Returns – Overview",
+    page_title="🌌 Night Lights & Returns – Overview",
     layout="wide",
 )
 
-st.title("💡 Night Lights & Stock Returns – Project Overview")
+st.title("🌌 Night Lights & Stock Returns – Project Overview")
 
 st.caption(
     "S&P 500 firms × VIIRS night-time lights × monthly returns\n"
@@ -34,24 +34,6 @@ if panel.empty:
 panel = panel.copy()
 panel["date"] = pd.to_datetime(panel["date"], errors="coerce")
 panel = panel.dropna(subset=["date"])
-
-# Columns we *expect* but we’ll guard against missing ones
-expected_cols = {
-    "ticker",
-    "firm",
-    "county_name",
-    "state",
-    "brightness_change",
-    "ret_fwd_1m",
-}
-
-missing = expected_cols - set(panel.columns)
-if missing:
-    st.warning(
-        "Some expected columns are missing from nightlights_model_data.csv.\n\n"
-        f"Missing: {missing}\n\n"
-        "The overview will show whatever it can with the columns that are available."
-    )
 
 # ----------------------------
 # 2. Basic sample statistics
@@ -171,8 +153,8 @@ That question is answered rigorously on the **Regression** page, which reports:
 - its **t-statistic and p-value**, and  
 - the **incremental R²** contributed by brightness over and above month fixed effects.
 
-Spoiler: in our results, the β coefficient is **very close to zero** and **not statistically significant**, and the incremental R² is **basically zero**.  
-So the regression tells us that **night-lights do *not* generate a tradable edge** in predicting next-month returns once we strip out broad market and seasonal forces.
+In our results, the β coefficient is **very close to zero** and **not statistically significant**, and the incremental R² is **essentially zero**.  
+Thus the regression shows that **night-lights do *not* generate a tradable predictive edge** once we strip out broad market and seasonal forces.
 """)
 
 # ----------------------------
@@ -210,4 +192,5 @@ st.success(
     "Use this page to introduce the data and intuition, then rely on the other tabs "
     "to tell the detailed story: firm-level, county-level, map-based, and regression-based evidence."
 )
+
 
