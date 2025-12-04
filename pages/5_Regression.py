@@ -66,6 +66,7 @@ Equation:
 𝑅𝑡+1 = 𝛽𝐿𝑡 + 𝛾𝑡
 
 Rt+1=βLt+γt
+
 	
 What Each Variable Means
 
@@ -92,11 +93,11 @@ How much night-time brightness around a firm’s HQ changed this month.
 
 Controls for everything happening in that month to all firms:
    
-	-market-wide moves
+	market-wide moves
     
-	-economic shocks
+	economic shocks
 	
-    -seasonality (winter vs. summer)
+    seasonality (winter vs. summer)
 	
 This ensures we only compare firms within the same month.
 
